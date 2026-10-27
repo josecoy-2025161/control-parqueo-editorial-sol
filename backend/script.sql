@@ -4,10 +4,13 @@ COLLATE utf8mb4_unicode_ci;
 
 USE control_parqueo;
 
+-- =============================================================================
+-- TABLA 1: REGISTRO DE TICKETS DEL DÍA
+-- =============================================================================
 CREATE TABLE IF NOT EXISTS registro_tickets (
     id_registro INT AUTO_INCREMENT PRIMARY KEY,
     
-    -- Fecha de la jornada en que operó el parqueo
+    -- Fecha de la jornada en que operó el parqueo (físico)
     fecha_operacion DATE NOT NULL,
     
     -- Número correlativo del talonario físico (ej. "160458")
@@ -15,9 +18,6 @@ CREATE TABLE IF NOT EXISTS registro_tickets (
     
     -- Tipo de vehículo marcado en el talonario
     tipo_vehiculo ENUM('CARRO', 'MOTO') NOT NULL,
-    
-    -- Placa guatemalteca (ej. P124KKK, M550BTR)
-    placa VARCHAR(10) NOT NULL,
     
     -- Horas extraídas del talonario físico
     hora_entrada TIME NOT NULL,
@@ -31,17 +31,51 @@ CREATE TABLE IF NOT EXISTS registro_tickets (
         END
     ) STORED,
     
-    -- Cobro total anotado en el ticket en Quetzales enteros
+    -- Cobro total calculado en Quetzales enteros
     costo INT NOT NULL,
     
-    -- Banderas operativas
+    -- Banderas de casos especiales
     es_ticket_perdido BOOLEAN NOT NULL DEFAULT FALSE,
     aplica_tarifa_noche BOOLEAN NOT NULL DEFAULT FALSE,
     
-    -- Registro de auditoría de cuándo se digitó en el sistema
+    -- Auditoría de edición de horario (NULL al crear, obligatorio al editar)
+    motivo_edicion TEXT NULL,
+    
+    -- Registro de auditoría de cuándo se digitó en el sistema (digital)
     fecha_captura TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
--- Índices de alto rendimiento para el reporte diario en Excel y auditoría
+-- Índices para optimizar la consulta del día y exportación a Excel
 CREATE INDEX idx_tickets_fecha_operacion ON registro_tickets(fecha_operacion);
-CREATE INDEX idx_tickets_placa ON registro_tickets(placa);
+CREATE INDEX idx_tickets_numero ON registro_tickets(numero_ticket);
+
+
+-- =============================================================================
+-- TABLA 2: AUDITORÍA DE TICKETS ELIMINADOS
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS auditoria_borrados (
+    id_borrado INT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- Referencia al ID que tenía en la tabla principal antes de su remoción
+    id_registro_original INT NOT NULL,
+    
+    -- Datos del ticket físico que fue anulado
+    fecha_operacion DATE NOT NULL,
+    numero_ticket VARCHAR(20) NOT NULL,
+    tipo_vehiculo ENUM('CARRO', 'MOTO') NOT NULL,
+    hora_entrada TIME NOT NULL,
+    hora_salida TIME NOT NULL,
+    minutos_estacionado INT NOT NULL,
+    costo INT NOT NULL,
+    es_ticket_perdido BOOLEAN NOT NULL DEFAULT FALSE,
+    aplica_tarifa_noche BOOLEAN NOT NULL DEFAULT FALSE,
+    
+    -- Justificación obligatoria de la eliminación
+    motivo_eliminacion TEXT NOT NULL,
+    
+    -- Fechas de trazabilidad
+    fecha_captura_original TIMESTAMP NOT NULL,
+    fecha_eliminacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_borrados_fecha_operacion ON auditoria_borrados(fecha_operacion);
