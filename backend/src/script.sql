@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS control_parqueo
+CREATE DATABASE IF NOT EXISTS control_parqueo_sol
 CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
 
-USE control_parqueo;
+USE control_parqueo_sol;
 
 -- =============================================================================
 -- TABLA 1: REGISTRO DE TICKETS DEL DÍA (Operativa - Se limpia tras el cierre)
