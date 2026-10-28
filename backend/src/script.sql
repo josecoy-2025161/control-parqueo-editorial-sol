@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS registro_tickets (
     motivo_edicion TEXT NULL,
     
     -- Registro de auditoría de cuándo se digitó en el sistema (digital)
-    fecha_captura TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    fecha_captura TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
 -- Índices para optimizar la consulta del día y exportación a Excel
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS auditoria_borrados (
     
     -- Fechas de trazabilidad
     fecha_captura_original TIMESTAMP NOT NULL,
-    fecha_eliminacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    fecha_eliminacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_borrados_fecha_operacion ON auditoria_borrados(fecha_operacion);
