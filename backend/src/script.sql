@@ -5,7 +5,7 @@ COLLATE utf8mb4_unicode_ci;
 USE control_parqueo;
 
 -- =============================================================================
--- TABLA 1: REGISTRO DE TICKETS DEL DÍA
+-- TABLA 1: REGISTRO DE TICKETS DEL DÍA (Operativa - Se limpia tras el cierre)
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS registro_tickets (
     id_registro INT AUTO_INCREMENT PRIMARY KEY,
@@ -79,3 +79,31 @@ CREATE TABLE IF NOT EXISTS auditoria_borrados (
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_borrados_fecha_operacion ON auditoria_borrados(fecha_operacion);
+
+-- =============================================================================
+-- TABLA 3: HISTÓRICO PERMANENTE DE TICKETS REGISTRADOS (Copia de respaldo)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS auditoria_tickets_registrados (
+    id_historico INT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- Referencia al ID que tuvo en la tabla diaria
+    id_registro_original INT NOT NULL,
+    
+    fecha_operacion DATE NOT NULL,
+    numero_ticket VARCHAR(20) NOT NULL,
+    tipo_vehiculo ENUM('CARRO', 'MOTO') NOT NULL,
+    hora_entrada TIME NOT NULL,
+    hora_salida TIME NOT NULL,
+    minutos_estacionado INT NOT NULL,
+    costo INT NOT NULL,
+    es_ticket_perdido BOOLEAN NOT NULL DEFAULT FALSE,
+    aplica_tarifa_noche BOOLEAN NOT NULL DEFAULT FALSE,
+    motivo_edicion TEXT NULL,
+    
+    -- Trazabilidad temporal completa
+    fecha_captura TIMESTAMP NOT NULL,
+    fecha_cierre_sistema TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_historico_fecha_operacion ON auditoria_tickets_registrados(fecha_operacion);
+CREATE INDEX idx_historico_numero ON auditoria_tickets_registrados(numero_ticket);
