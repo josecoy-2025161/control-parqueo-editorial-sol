@@ -4,6 +4,7 @@ import { ENV } from './config/env.js';
 import { testDbConnection } from './config/db.js';
 import authRoutes from './routes/auth.routes.js';
 import tarifaRoutes from './routes/tarifa.routes.js';
+import ticketRoutes from './routes/ticket.routes.js';
 import { basicAuthMiddleware } from './middlewares/auth.middleware.js';
 import { notFoundMiddleware } from './middlewares/not-found.middleware.js';
 
@@ -20,6 +21,7 @@ app.use('/sol/tickets', basicAuthMiddleware, ticketRoutes); */
 
 // Rutas operativas
 app.use('/sol/tarifas', basicAuthMiddleware, tarifaRoutes);
+app.use('/sol/tickets', basicAuthMiddleware, ticketRoutes);
 
 // Middleware para rutas no encontradas (404)
 app.use(notFoundMiddleware);
