@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { TicketController } from '../controllers/ticket.controller.js';
+import { verificarJornadaActivaMiddleware } from '../middlewares/verificar-jornada.middleware.js';
 
 const router = Router();
 
@@ -29,7 +30,7 @@ router.route('/buscar/:numero')
 
 // Edición de horario / balance por ID interno
 router.route('/:id/balance')
-    .patch(TicketController.balanceHorario)
+    .patch(verificarJornadaActivaMiddleware, TicketController.balanceHorario)
     .all((req: Request, res: Response) => {
         res.setHeader('Allow', 'PATCH');
         res.status(405).json({ ok: false, mensaje: `Método ${req.method} no permitido en ${req.originalUrl}. Acepta: PATCH.` });
@@ -37,7 +38,7 @@ router.route('/:id/balance')
 
 // Eliminación justificada por ID interno
 router.route('/:id')
-    .delete(TicketController.eliminar)
+    .delete(verificarJornadaActivaMiddleware, TicketController.eliminar)
     .all((req: Request, res: Response) => {
         res.setHeader('Allow', 'DELETE');
         res.status(405).json({ ok: false, mensaje: `Método ${req.method} no permitido en ${req.originalUrl}. Acepta: DELETE.` });
