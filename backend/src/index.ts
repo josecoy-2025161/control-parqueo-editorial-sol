@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.routes.js';
 import tarifaRoutes from './routes/tarifa.routes.js';
 import ticketRoutes from './routes/ticket.routes.js';
 import jornadaRoutes from './routes/jornada.routes.js'
+import reporteRoutes from './routes/reporte.routes.js';
 import { basicAuthMiddleware } from './middlewares/auth.middleware.js';
 import { notFoundMiddleware } from './middlewares/not-found.middleware.js';
 import { globalErrorHandler } from './middlewares/error.middleware.js';
@@ -22,6 +23,7 @@ app.use('/sol/acceso', authRoutes);
 app.use('/sol/tarifas', basicAuthMiddleware, tarifaRoutes);
 app.use('/sol/tickets', basicAuthMiddleware, ticketRoutes);
 app.use('/sol/jornada', basicAuthMiddleware, jornadaRoutes);
+app.use('/sol/reportes', basicAuthMiddleware, reporteRoutes);
 
 // Middleware para rutas no encontradas (404)
 app.use(notFoundMiddleware);

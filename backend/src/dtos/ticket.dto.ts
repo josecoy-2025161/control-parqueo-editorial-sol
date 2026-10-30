@@ -8,6 +8,7 @@ export interface TicketActivoDto {
     horaEntrada: string;
     horaSalida: string;
     minutosEstacionado: number;
+    tiempoLegible: string;      // Ej. "1 hr 25 min" para la tabla de auditoría
     costo: number;
     esTicketPerdido: boolean;
     aplicaTarifaNoche: boolean;

@@ -1,5 +1,6 @@
 import { TicketModel, TicketRow } from '../models/ticket.model.js';
 import { TarifaService } from './tarifa.service.js';
+import { ValidacionesGlobales } from '../utils/validation.util.js';
 import {
     CrearTicketRequestDto,
     EditarHorarioRequestDto,
@@ -18,6 +19,7 @@ export class TicketService {
             horaEntrada: row.hora_entrada,
             horaSalida: row.hora_salida,
             minutosEstacionado: row.minutos_estacionado,
+            tiempoLegible: ValidacionesGlobales.formatearMinutosLegible(row.minutos_estacionado),
             costo: row.costo,
             esTicketPerdido: Boolean(row.es_ticket_perdido),
             aplicaTarifaNoche: Boolean(row.aplica_tarifa_noche),
