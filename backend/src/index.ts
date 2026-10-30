@@ -5,8 +5,10 @@ import { testDbConnection } from './config/db.js';
 import authRoutes from './routes/auth.routes.js';
 import tarifaRoutes from './routes/tarifa.routes.js';
 import ticketRoutes from './routes/ticket.routes.js';
+import jornadaRoutes from './routes/jornada.routes.js'
 import { basicAuthMiddleware } from './middlewares/auth.middleware.js';
 import { notFoundMiddleware } from './middlewares/not-found.middleware.js';
+import { globalErrorHandler } from './middlewares/error.middleware.js';
 
 const app = express();
 
@@ -16,15 +18,16 @@ app.use(express.json());
 // Ruta de autenticación y verificación
 app.use('/sol/acceso', authRoutes);
 
-/*  Proteger todas las rutas operativas bajo /sol/...
-app.use('/sol/tickets', basicAuthMiddleware, ticketRoutes); */
-
 // Rutas operativas
 app.use('/sol/tarifas', basicAuthMiddleware, tarifaRoutes);
 app.use('/sol/tickets', basicAuthMiddleware, ticketRoutes);
+app.use('/sol/jornada', basicAuthMiddleware, jornadaRoutes);
 
 // Middleware para rutas no encontradas (404)
 app.use(notFoundMiddleware);
+
+// Middleware global de manejo de excepciones
+app.use(globalErrorHandler);
 
 app.listen(ENV.PORT, async () => {
     console.log(`Servidor backend corriendo en el puerto ${ENV.PORT}`);
