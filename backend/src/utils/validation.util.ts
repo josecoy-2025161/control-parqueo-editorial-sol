@@ -132,4 +132,23 @@ export class ValidacionesGlobales {
     public static normalizarBooleano = (valor: unknown): boolean => {
         return valor === true || valor === 'true' || valor === 1 || valor === '1';
     };
+
+    /**
+     * Convierte una cantidad de minutos a formato legible "X hr(s) Y min"
+     * Ejemplos: 85 -> "1 hr 25 min", 180 -> "3 hrs 00 min", 40 -> "40 min"
+     */
+    public static formatearMinutosLegible = (minutos: number): string => {
+        if (isNaN(minutos) || minutos < 0) return '0 min';
+
+        const horas = Math.floor(minutos / 60);
+        const minsRestantes = minutos % 60;
+
+        if (horas === 0) {
+            return `${minsRestantes} min`;
+        }
+
+        const sufijoHora = horas === 1 ? 'hr' : 'hrs';
+        const minsFormateados = String(minsRestantes).padStart(2, '0');
+        return `${horas} ${sufijoHora} ${minsFormateados} min`;
+    };
 }
