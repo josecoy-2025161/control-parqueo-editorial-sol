@@ -1,1 +1,14 @@
-/* You can add global styles to this file, and also import other style files */
+@import "tailwindcss";
+
+@theme {
+    /* Paleta oficial del Sistema de Parqueo */
+    --color-sol-green: #059669;
+    --color-sol-green-dark: #047857;
+    --color-sol-blue: #2563eb;
+    --color-sol-blue-dark: #1d4ed8;
+    --color-sol-red: #dc2626;
+    --color-sol-red-dark: #b91c1c;
+    --color-sol-bg: #f8fafc;
+    --color-sol-surface: #ffffff;
+    --color-sol-border: #e2e8f0;
+}
