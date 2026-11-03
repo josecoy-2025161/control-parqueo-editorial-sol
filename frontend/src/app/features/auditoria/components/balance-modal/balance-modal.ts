@@ -57,12 +57,15 @@ export class BalanceModal implements OnInit, OnDestroy {
       return;
     }
 
+    // Evaluar si las nuevas horas cruzan las 17:30 o salen al día siguiente
+    const cruzaNoche = horaSalida <= horaEntrada || horaSalida > '17:30' || horaEntrada >= '17:30';
+
     this.calculando.set(true);
     this.auditoriaService.recalcularTarifaSimulada({
       horaEntrada,
       horaSalida,
       tipoVehiculo: this.ticket.tipoVehiculo,
-      aplicaTarifaNoche: this.ticket.aplicaTarifaNoche,
+      aplicaTarifaNoche: cruzaNoche, // <-- Se evalúa con el nuevo horario
       esTicketPerdido: this.ticket.esTicketPerdido
     }).subscribe({
       next: (res) => {

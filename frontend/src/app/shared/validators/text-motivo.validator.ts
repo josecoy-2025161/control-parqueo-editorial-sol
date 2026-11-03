@@ -1,6 +1,6 @@
 import { AbstractControl, ValidationErrors, ValidatorFn } from '@angular/forms';
 
-export function motivoValidator(minLongitud: number = 5): ValidatorFn {
+export function motivoValidator(minLongitud: number = 6): ValidatorFn {
     return (control: AbstractControl): ValidationErrors | null => {
         const valor = control.value;
         if (!valor || typeof valor !== 'string') {
@@ -8,6 +8,10 @@ export function motivoValidator(minLongitud: number = 5): ValidatorFn {
         }
 
         const limpio = valor.trim();
+        if (limpio.length === 0) {
+            return { required: true };
+        }
+
         if (limpio.length < minLongitud) {
             return { minlength: { requiredLength: minLongitud, actualLength: limpio.length } };
         }

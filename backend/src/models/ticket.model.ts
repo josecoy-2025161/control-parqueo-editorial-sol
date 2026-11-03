@@ -83,13 +83,14 @@ export class TicketModel {
         horaEntrada: string,
         horaSalida: string,
         costo: number,
-        motivoEdicion: string
+        motivoEdicion: string,
+        aplicaTarifaNoche: boolean
     ): Promise<boolean> {
         const [result] = await pool.query<ResultSetHeader>(
             `UPDATE registro_tickets 
-       SET hora_entrada = ?, hora_salida = ?, costo = ?, motivo_edicion = ?
-       WHERE id_registro = ?`,
-            [horaEntrada, horaSalida, costo, motivoEdicion, idRegistro]
+             SET hora_entrada = ?, hora_salida = ?, costo = ?, motivo_edicion = ?, aplica_tarifa_noche = ?
+             WHERE id_registro = ?`,
+            [horaEntrada, horaSalida, costo, motivoEdicion, aplicaTarifaNoche, idRegistro]
         );
         return result.affectedRows > 0;
     }

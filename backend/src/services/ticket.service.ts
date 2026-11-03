@@ -104,12 +104,17 @@ export class TicketService {
             throw new Error('Debe modificar al menos una de las horas para registrar el cambio.');
         }
 
-        // Recalcular tarifa con el nuevo horario
+        // Recalcular evaluando si el nuevo horario amerita o no tarifa de noche
+        const cruzoHorarioCierre =
+            dto.horaSalida <= dto.horaEntrada ||
+            dto.horaSalida > '17:30' ||
+            dto.horaEntrada >= '17:30';
+
         const calculo = TarifaService.procesarCalculo({
             horaEntrada: dto.horaEntrada,
             horaSalida: dto.horaSalida,
             tipoVehiculo: ticketActual.tipo_vehiculo,
-            aplicaTarifaNoche: Boolean(ticketActual.aplica_tarifa_noche),
+            aplicaTarifaNoche: cruzoHorarioCierre, // Se recalcula con base en el nuevo horario
             esTicketPerdido: Boolean(ticketActual.es_ticket_perdido),
         });
 
@@ -118,7 +123,8 @@ export class TicketService {
             dto.horaEntrada,
             dto.horaSalida,
             calculo.costo,
-            dto.motivoEdicion
+            dto.motivoEdicion,
+            cruzoHorarioCierre // Actualiza la columna aplica_tarifa_noche
         );
 
         const ticketActualizado = await TicketModel.findById(idRegistro);

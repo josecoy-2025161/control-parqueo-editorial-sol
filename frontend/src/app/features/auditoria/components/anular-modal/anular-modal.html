@@ -53,9 +53,15 @@
             <textarea id="motivoAnulacion" [formControl]="motivoControl" rows="2" (input)="autoAjustar($event)"
                 placeholder="Ej: Talonario anulado físicamente por corte de papel erróneo o duplicado."
                 class="w-full px-3 py-2 text-xs border rounded-md border-slate-300 text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none overflow-hidden min-h-14 transition-[height] duration-75"></textarea>
-            @if (motivoControl.touched && motivoControl.invalid) {
-            <span class="text-[11px] text-rose-600 block mt-0.5">El motivo de anulación es obligatorio (mínimo 6
-                caracteres válidos).</span>
+            @if (motivoControl.touched) {
+            @if (motivoControl.hasError('required')) {
+            <span class="text-[11px] text-rose-600 block mt-0.5">El motivo de anulación es obligatorio.</span>
+            } @else if (motivoControl.hasError('minlength')) {
+            <span class="text-[11px] text-rose-600 block mt-0.5">El motivo debe tener al menos 6 caracteres.</span>
+            } @else if (motivoControl.hasError('formatoInvalido')) {
+            <span class="text-[11px] text-rose-600 block mt-0.5">No se permiten emojis ni caracteres especiales de
+                control.</span>
+            }
             }
         </div>
 

@@ -75,9 +75,15 @@
                 <textarea id="motivoEdicion" formControlName="motivoEdicion" rows="2" (input)="autoAjustar($event)"
                     placeholder="Ej: Corrección por digitación errónea en la hora de salida física."
                     class="w-full px-3 py-2 text-xs border rounded-md border-slate-300 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-hidden min-h-14 transition-[height] duration-75"></textarea>
-                @if (balanceForm.get('motivoEdicion')?.touched && balanceForm.get('motivoEdicion')?.invalid) {
-                <span class="text-[11px] text-rose-600 block mt-0.5">El motivo es obligatorio (mínimo 6 caracteres
-                    válidos).</span>
+                @if (balanceForm.get('motivoEdicion')?.touched) {
+                @if (balanceForm.get('motivoEdicion')?.hasError('required')) {
+                <span class="text-[11px] text-rose-600 block mt-0.5">El motivo es obligatorio.</span>
+                } @else if (balanceForm.get('motivoEdicion')?.hasError('minlength')) {
+                <span class="text-[11px] text-rose-600 block mt-0.5">El motivo debe tener al menos 6 caracteres.</span>
+                } @else if (balanceForm.get('motivoEdicion')?.hasError('formatoInvalido')) {
+                <span class="text-[11px] text-rose-600 block mt-0.5">No se permiten emojis ni caracteres especiales de
+                    control.</span>
+                }
                 }
             </div>
 
