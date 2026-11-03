@@ -18,7 +18,9 @@ export class JornadaPollingService {
     private readonly baseUrl = environment.apiUrl;
     private pollingSub: Subscription | null = null;
 
-    // Fase actual en la que se encuentra la jornada
+    // Canal para comunicación instantánea entre todas las ventanas del navegador
+    private broadcastChannel: BroadcastChannel | null = null;
+
     public readonly faseActual = signal<FaseJornada>(
         (localStorage.getItem('sol_fase_jornada') as FaseJornada) || 'REGISTRO'
     );
@@ -27,18 +29,39 @@ export class JornadaPollingService {
     public readonly estadoJornada = signal<EstadoJornadaResponseDto | null>(null);
 
     constructor() {
+        // Escucha por BroadcastChannel (instantáneo)
+        if (typeof BroadcastChannel !== 'undefined') {
+            this.broadcastChannel = new BroadcastChannel('sol_parqueo_channel');
+            this.broadcastChannel.onmessage = (event) => {
+                if (event.data?.tipo === 'FASE_CAMBIADA') {
+                    const nuevaFase: FaseJornada = event.data.fase;
+                    this.aplicarFase(nuevaFase);
+                }
+            };
+        }
+
+        // Escucha de respaldo por localStorage
         window.addEventListener('storage', (event) => {
             if (event.key === 'sol_fase_jornada') {
                 const nuevaFase = (event.newValue as FaseJornada) || 'REGISTRO';
-                this.faseActual.set(nuevaFase);
-
-                if (nuevaFase === 'AUDITORIA') {
-                    this.router.navigate(['/auditoria']);
-                } else if (nuevaFase === 'REGISTRO') {
-                    this.router.navigate(['/registro']);
-                }
+                this.aplicarFase(nuevaFase);
             }
         });
+    }
+
+    private aplicarFase(fase: FaseJornada): void {
+        this.faseActual.set(fase);
+        if (fase === 'AUDITORIA') {
+            localStorage.setItem('sol_fase_jornada', 'AUDITORIA');
+            if (this.router.url.includes('/registro') || this.router.url === '/') {
+                this.router.navigate(['/auditoria']);
+            }
+        } else if (fase === 'REGISTRO') {
+            localStorage.removeItem('sol_fase_jornada');
+            if (this.router.url.includes('/auditoria') || this.router.url.includes('/cierre')) {
+                this.router.navigate(['/registro']);
+            }
+        }
     }
 
     public consultarEstado(): Observable<ApiResponse<EstadoJornadaResponseDto>> {
@@ -57,14 +80,12 @@ export class JornadaPollingService {
                 const data = res.data as any;
                 this.estadoJornada.set(data);
 
-                // Si otro operador finalizó el registro desde cualquier otro navegador/dispositivo
-                if (data.fase === 'AUDITORIA' && this.router.url.includes('/registro')) {
-                    this.faseActual.set('AUDITORIA');
-                    localStorage.setItem('sol_fase_jornada', 'AUDITORIA');
-                    this.router.navigate(['/auditoria']);
+                // Si el backend reporta que ya está en fase de AUDITORIA y este operador sigue en registro
+                if (data.fase === 'AUDITORIA') {
+                    this.aplicarFase('AUDITORIA');
                 }
 
-                // Si la jornada fue cerrada y reiniciada
+                // Si la jornada fue cerrada transaccionalmente y limpiada en base de datos
                 if (data.activa === false && data.totalTicketsActivos === 0) {
                     if (this.faseActual() === 'AUDITORIA') {
                         this.notificarJornadaCerradaPorOtroOperador();
@@ -81,29 +102,22 @@ export class JornadaPollingService {
         }
     }
 
-    // Marcar que el registro del día fue finalizado
     public finalizarRegistroDelDia(): void {
-        // Notificar al backend para que todos los dispositivos/incógnito se enteren
+        // Avisar inmediatamente a las demás pestañas en este equipo
+        this.broadcastChannel?.postMessage({ tipo: 'FASE_CAMBIADA', fase: 'AUDITORIA' });
+        this.aplicarFase('AUDITORIA');
+
+        // Avisar al backend para que dispositivos remotos se sincronicen
         this.http.post(`${this.baseUrl}/jornada/finalizar-registro`, {}).subscribe({
-            next: () => {
-                this.faseActual.set('AUDITORIA');
-                localStorage.setItem('sol_fase_jornada', 'AUDITORIA');
-                this.router.navigate(['/auditoria']);
-            },
-            error: () => {
-                this.faseActual.set('AUDITORIA');
-                localStorage.setItem('sol_fase_jornada', 'AUDITORIA');
-                this.router.navigate(['/auditoria']);
-            }
+            next: () => { },
+            error: () => { }
         });
     }
 
-    // Reiniciar cuando se confirma el cierre definitivo y se vacía la jornada
     public reiniciarParaNuevaJornada(): void {
-        this.faseActual.set('REGISTRO');
-        localStorage.removeItem('sol_fase_jornada');
+        this.broadcastChannel?.postMessage({ tipo: 'FASE_CAMBIADA', fase: 'REGISTRO' });
+        this.aplicarFase('REGISTRO');
         this.jornadaCerradaModalVisible.set(false);
-        this.router.navigate(['/registro']);
     }
 
     public notificarJornadaCerradaPorOtroOperador(): void {

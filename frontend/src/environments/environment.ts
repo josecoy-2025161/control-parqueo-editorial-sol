@@ -1,5 +1,5 @@
 export const environment = {
     production: true,
     apiUrl: '/sol',
-    pollingIntervalMs: 15000,
+    pollingIntervalMs: 3000,
 };
