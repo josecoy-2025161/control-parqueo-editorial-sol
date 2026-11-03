@@ -43,9 +43,7 @@ export class Auditoria implements OnInit, OnDestroy {
   private readonly subs = new Subscription();
 
   ngOnInit(): void {
-    // Iniciar polling para detectar cierre concurrente por otro operador
     this.jornadaPolling.iniciarPolling();
-
     this.cargarDatosAuditoria();
 
     // Búsqueda reactiva por número de boleta con debounce
@@ -55,13 +53,18 @@ export class Auditoria implements OnInit, OnDestroy {
     ).subscribe((filtro) => {
       this.cargarDatosAuditoria(filtro || '');
     });
-
     this.subs.add(searchSub);
+
+    // Refresco automático cuando otra pestaña o el backend cambien la jornada
+    const refreshSub = this.jornadaPolling.recargarAuditoria$.subscribe(() => {
+      const filtroActual = this.buscadorControl.value || '';
+      this.cargarDatosAuditoria(filtroActual);
+    });
+    this.subs.add(refreshSub);
   }
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
-    this.jornadaPolling.detenerPolling();
   }
 
   public cargarDatosAuditoria(filtro?: string): void {
