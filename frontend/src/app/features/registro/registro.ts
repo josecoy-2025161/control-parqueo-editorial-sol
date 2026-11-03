@@ -6,6 +6,7 @@ import { Subscription, debounceTime, distinctUntilChanged } from 'rxjs';
 import { RegistroTicketService } from './services/registro-ticket.service';
 import { QuetzalPipe } from '../../shared/pipes/quetzal.pipe';
 import { TipoVehiculo } from '../../models/tarifa.model';
+import { JornadaPollingService } from '../../core/services/jornada-polling.service';
 
 function validarHorasDistintas(group: AbstractControl): ValidationErrors | null {
   const entrada = group.get('horaEntrada')?.value;
@@ -34,10 +35,12 @@ function validarFechaNoFutura(control: AbstractControl): ValidationErrors | null
   templateUrl: './registro.html',
   styleUrl: './registro.css'
 })
+
 export class Registro implements OnInit, OnDestroy {
   private readonly fb = inject(FormBuilder);
   private readonly ticketService = inject(RegistroTicketService);
   private readonly router = inject(Router);
+  private readonly jornadaService = inject(JornadaPollingService);
 
   public ticketForm!: FormGroup;
   public cobroCalculado = signal<number>(0);
@@ -193,6 +196,7 @@ export class Registro implements OnInit, OnDestroy {
   }
 
   public irAuditoria(): void {
-    this.router.navigate(['/auditoria']);
+    this.jornadaService.finalizarRegistroDelDia();
   }
+
 }

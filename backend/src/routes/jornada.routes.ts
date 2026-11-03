@@ -13,4 +13,14 @@ router.route('/estado')
         });
     });
 
+router.route('/finalizar-registro')
+    .post(JornadaController.finalizarRegistro)
+    .all((req: Request, res: Response) => {
+        res.setHeader('Allow', 'POST');
+        res.status(405).json({
+            ok: false,
+            mensaje: `Método ${req.method} no permitido en ${req.originalUrl}. Acepta: POST.`,
+        });
+    });
+
 export default router;

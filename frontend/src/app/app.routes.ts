@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { Registro } from './features/registro/registro';
+import { registroGuard } from './core/guards/registro.guard';
 
 export const routes: Routes = [
     {
@@ -9,7 +10,8 @@ export const routes: Routes = [
     },
     {
         path: 'registro',
-        component: Registro
+        component: Registro,
+        canActivate: [registroGuard] // <-- Bloquea el acceso si ya se finalizó el registro
     },
     {
         path: 'auditoria',
