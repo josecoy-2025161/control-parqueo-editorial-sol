@@ -32,6 +32,16 @@
             </div>
         </header>
 
+        <!-- Aviso de Éxito -->
+        @if (mensajeExito()) {
+        <div
+            class="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex justify-between items-center">
+            <span>{{ mensajeExito() }}</span>
+            <button type="button" (click)="mensajeExito.set(null)"
+                class="text-emerald-600 hover:text-emerald-900 font-bold ml-2">✕</button>
+        </div>
+        }
+
         <!-- Avisos de Error -->
         @if (mensajeError()) {
         <div
@@ -42,7 +52,7 @@
         </div>
         }
 
-        <!-- Tarjetas de Resumen Global (Mockup) -->
+        <!-- Tarjetas de Resumen Global -->
         <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
                 <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Carros</span>
@@ -203,6 +213,18 @@
                         }
                     </tbody>
                 </table>
+
+                <!-- Modales de Auditoría -->
+                @if (ticketParaEditar()) {
+                <app-balance-modal [ticket]="ticketParaEditar()!" (cancelado)="ticketParaEditar.set(null)"
+                    (guardado)="onTicketEditado($event)" />
+                }
+
+                @if (ticketParaAnular()) {
+                <app-anular-modal [ticket]="ticketParaAnular()!" (cancelado)="ticketParaAnular.set(null)"
+                    (anuladoExitoso)="onTicketAnulado($event)" />
+                }
+
             </div>
         </section>
 

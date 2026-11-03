@@ -10,11 +10,13 @@ import { TicketActivoDto } from '../../models/ticket.model';
 import { ResumenAuditoriaDto } from '../../models/auditoria.model';
 import { QuetzalPipe } from '../../shared/pipes/quetzal.pipe';
 import { TicketDurationPipe } from '../../shared/pipes/ticket-duration.pipe';
+import { BalanceModal } from './components/balance-modal/balance-modal';
+import { AnularModal } from './components/anular-modal/anular-modal';
 
 @Component({
   selector: 'app-auditoria',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, QuetzalPipe, TicketDurationPipe],
+  imports: [CommonModule, ReactiveFormsModule, QuetzalPipe, TicketDurationPipe, BalanceModal, AnularModal],
   templateUrl: './auditoria.html',
   styleUrl: './auditoria.css'
 })
@@ -28,6 +30,7 @@ export class Auditoria implements OnInit, OnDestroy {
   public cargando = signal<boolean>(true);
   public generandoExcel = signal<boolean>(false);
   public mensajeError = signal<string | null>(null);
+  public mensajeExito = signal<string | null>(null);
 
   public tickets = signal<TicketActivoDto[]>([]);
   public resumen = signal<ResumenAuditoriaDto>({
@@ -40,13 +43,17 @@ export class Auditoria implements OnInit, OnDestroy {
 
   public fechaOperacionActual = signal<string>('—');
   public buscadorControl = new FormControl('');
+
+  // Estados de los modales
+  public ticketParaEditar = signal<TicketActivoDto | null>(null);
+  public ticketParaAnular = signal<TicketActivoDto | null>(null);
+
   private readonly subs = new Subscription();
 
   ngOnInit(): void {
     this.jornadaPolling.iniciarPolling();
     this.cargarDatosAuditoria();
 
-    // Búsqueda reactiva por número de boleta con debounce
     const searchSub = this.buscadorControl.valueChanges.pipe(
       debounceTime(300),
       distinctUntilChanged()
@@ -55,7 +62,6 @@ export class Auditoria implements OnInit, OnDestroy {
     });
     this.subs.add(searchSub);
 
-    // Refresco automático cuando otra pestaña o el backend cambien la jornada
     const refreshSub = this.jornadaPolling.recargarAuditoria$.subscribe(() => {
       const filtroActual = this.buscadorControl.value || '';
       this.cargarDatosAuditoria(filtroActual);
@@ -78,7 +84,6 @@ export class Auditoria implements OnInit, OnDestroy {
           this.tickets.set(res.data.tickets || []);
           this.resumen.set(res.data.resumen);
 
-          // Si hay tickets, usar la fecha de operación del primero como referencia
           if (res.data.tickets && res.data.tickets.length > 0) {
             this.fechaOperacionActual.set(res.data.tickets[0].fechaOperacion);
           }
@@ -91,6 +96,26 @@ export class Auditoria implements OnInit, OnDestroy {
     });
   }
 
+  public abrirEditar(ticket: TicketActivoDto): void {
+    this.ticketParaEditar.set(ticket);
+  }
+
+  public onTicketEditado(ticketActualizado: TicketActivoDto): void {
+    this.ticketParaEditar.set(null);
+    this.mensajeExito.set(`Boleta ${ticketActualizado.numeroTicket} corregida exitosamente.`);
+    this.cargarDatosAuditoria(this.buscadorControl.value || '');
+  }
+
+  public abrirEliminar(ticket: TicketActivoDto): void {
+    this.ticketParaAnular.set(ticket);
+  }
+
+  public onTicketAnulado(idRegistro: number): void {
+    this.ticketParaAnular.set(null);
+    this.mensajeExito.set('Boleta anulada y transferida al registro de auditoría.');
+    this.cargarDatosAuditoria(this.buscadorControl.value || '');
+  }
+
   public generarReporteExcel(): void {
     this.generandoExcel.set(true);
     this.reportesService.descargarExcel().subscribe({
@@ -99,7 +124,6 @@ export class Auditoria implements OnInit, OnDestroy {
         const fallback = `Reporte_Parqueo_${new Date().toLocaleDateString('es-GT').replace(/\//g, '_')}.xlsx`;
         const nombreArchivo = this.reportesService.obtenerNombreArchivo(response, fallback);
 
-        // Disparar la descarga en el navegador
         if (response.body) {
           const blob = new Blob([response.body], {
             type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -112,7 +136,6 @@ export class Auditoria implements OnInit, OnDestroy {
           window.URL.revokeObjectURL(url);
         }
 
-        // Navegar a la pantalla de confirmación de cierre
         this.router.navigate(['/cierre'], {
           state: {
             nombreArchivo,
@@ -126,18 +149,5 @@ export class Auditoria implements OnInit, OnDestroy {
         this.mensajeError.set(err.error?.mensaje || 'Error al generar y descargar el reporte Excel.');
       }
     });
-  }
-
-  public volverRegistro(): void {
-    this.router.navigate(['/registro']);
-  }
-
-  // Métodos que dispararán los modales de balance y anulación
-  public abrirEditar(ticket: TicketActivoDto): void {
-    alert(`Editar horario de ticket: ${ticket.numeroTicket} (Se conectará en la rama de modales)`);
-  }
-
-  public abrirEliminar(ticket: TicketActivoDto): void {
-    alert(`Anular ticket: ${ticket.numeroTicket} (Se conectará en la rama de modales)`);
   }
 }
