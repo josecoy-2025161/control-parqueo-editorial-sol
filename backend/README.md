@@ -1,462 +1,290 @@
 # Control de Parqueo (Editorial Sol) — Backend API
 
-Backend para digitalizar los tickets físicos de un parqueo, calcular los cobros según las reglas del negocio, mantener trazabilidad de correcciones y anulaciones, generar reportes en Excel y cerrar jornadas de forma segura.
+API REST que digitaliza los tickets físicos de un parqueo: calcula los cobros según las reglas del negocio, audita correcciones y anulaciones, genera el reporte Excel y cierra la jornada de forma transaccional. Está pensada para que **varios operadores trabajen a la vez** sobre los mismos datos.
 
-El sistema permite que varios operadores trabajen simultáneamente desde distintos dispositivos sobre los mismos datos. La consistencia de la información, la auditoría y la protección frente a operaciones concurrentes son requisitos centrales.
+> Documentación general del proyecto: [README de la raíz](../README.md) · Interfaz: [README del frontend](../frontend/README.md)
 
 ---
 
-## 1. Características principales
+## Tabla de contenido
 
-- Registro digital de tickets físicos de parqueo.
-- Cálculo automático del tiempo facturable y del importe.
-- Tarifas diferenciadas para carros y motocicletas.
-- Aplicación de recargos por ticket perdido y tarifa nocturna.
-- Consulta, búsqueda y revisión de tickets activos.
-- Corrección de horarios mediante un proceso de balance con justificación obligatoria.
-- Anulación de tickets con conservación de sus datos originales.
-- Auditoría de eliminaciones y almacenamiento histórico de tickets registrados.
-- Generación de reportes Excel con hojas separadas para tickets activos y eliminados.
-- Cierre transaccional de jornada.
-- Protección para el trabajo simultáneo de varios operadores.
-- Autenticación mediante HTTP Basic Auth.
+1. [Características](#1-características)
+2. [Tecnologías y requisitos](#2-tecnologías-y-requisitos)
+3. [Instalación y ejecución](#3-instalación-y-ejecución)
+4. [Variables de entorno](#4-variables-de-entorno)
+5. [Estructura del código](#5-estructura-del-código)
+6. [Conceptos clave y flujo de la jornada](#6-conceptos-clave-y-flujo-de-la-jornada)
+7. [Reglas de negocio](#7-reglas-de-negocio)
+8. [API REST](#8-api-rest)
+9. [Reporte Excel](#9-reporte-excel)
+10. [Cierre de jornada y concurrencia](#10-cierre-de-jornada-y-concurrencia)
+11. [Base de datos](#11-base-de-datos)
+12. [Validaciones](#12-validaciones)
+13. [Códigos HTTP y errores](#13-códigos-http-y-errores)
+14. [Limitaciones y notas técnicas](#14-limitaciones-y-notas-técnicas)
+
+---
+
+## 1. Características
+
+- Registro de tickets con **cálculo automático** del tiempo facturable y del importe.
+- Tarifas diferenciadas para **carros y motos**, con recargos por **tarifa nocturna** y **ticket perdido**.
+- Consulta de tickets activos con **totales de auditoría** y búsqueda por número.
+- **Balance** de horarios (corrección de entrada/salida) con motivo obligatorio.
+- **Anulación auditada**: el ticket se conserva en `auditoria_borrados`.
+- **Reporte Excel** con tickets activos y eliminados.
+- **Cierre transaccional** que archiva la jornada en un histórico permanente.
+- Protección frente a **duplicados, ediciones y cierres concurrentes**.
+- Autenticación **HTTP Basic Auth** con credenciales compartidas.
 
 ## 2. Tecnologías y requisitos
 
-### Tecnologías
+| Tecnología | Uso |
+|---|---|
+| Node.js | Entorno de ejecución (módulos ES) |
+| Express 5 | Servidor y enrutamiento HTTP |
+| TypeScript (modo `strict`) | Tipado estático |
+| MySQL + `mysql2/promise` | Base de datos y pool de conexiones |
+| ExcelJS | Generación del reporte `.xlsx` |
+| dotenv | Variables de entorno |
+| tsx | Ejecución en desarrollo con recarga |
 
-La documentación del proyecto identifica las siguientes tecnologías:
+**Requisitos:** Node.js 18 o superior (se recomienda una LTS reciente), pnpm y MySQL 8.0 o superior.
 
-- **Node.js:** entorno de ejecución.
-- **Express:** servidor y enrutamiento HTTP.
-- **TypeScript:** tipado estático.
-- **MySQL:** sistema gestor de base de datos.
-- **mysql2/promise:** conexión y consultas a MySQL mediante promesas.
-- **ExcelJS:** generación de archivos Excel.
+## 3. Instalación y ejecución
 
-### Requisitos
+```bash
+# 1. Instalar dependencias
+pnpm install
 
-- Node.js 18 o superior.
-- MySQL 8.0 o superior.
-- pnpm como gestor de paquetes.
-- Un gestor de base de datos compatible con MySQL, como MySQL Workbench, DBeaver o la CLI de MySQL.
+# 2. Crear la base de datos (crea control_parqueo_sol y sus 3 tablas)
+mysql -u <usuario> -p < src/script.sql
 
-## 3. Configuración del entorno
+# 3. Configurar el entorno
+cp .env.example .env     # y completar los valores (ver sección 4)
 
-Crear un archivo `.env` en la raíz del backend con las variables necesarias:
+# 4. Ejecutar en desarrollo (recarga automática)
+pnpm dev
+```
+
+Al iniciar, el servidor prueba la conexión a MySQL; si falla, termina con un error. Si todo va bien verás:
+
+```text
+Conexión a la base de datos establecida correctamente.
+Servidor backend corriendo exitosamente en el puerto 3000
+```
+
+### Scripts disponibles
+
+| Script | Comando real | Descripción |
+|---|---|---|
+| `pnpm dev` | `tsx watch src/index.ts` | Desarrollo con recarga automática |
+| `pnpm build` | `tsc` | Compila a `dist/` |
+| `pnpm start` | `node dist/index.js` | Ejecuta la versión compilada (producción) |
+| `pnpm setup` | `tsx src/setup.ts` | Reservado: `src/setup.ts` está vacío actualmente |
+
+### Probar que funciona
+
+```bash
+curl -u usuario:clave http://localhost:3000/sol/acceso/verificar
+# {"success":true,"message":"Credenciales válidas. Acceso concedido."}
+```
+
+## 4. Variables de entorno
+
+Crea un archivo `.env` en la raíz de `backend/` (hay una plantilla en `.env.example`):
 
 ```env
 PORT=3000
 
 DB_HOST=localhost
+DB_PORT=3306
 DB_USER=
 DB_PASSWORD=
 DB_NAME=control_parqueo_sol
-DB_PORT=3306
 
-AUTH_USER=trabajador_sol
-AUTH_PASS=clave_segura_aqui
+AUTH_USER=
+AUTH_PASS=
 ```
 
-### Variables de entorno
-
-| Variable | Descripción |
-|---|---|
-| `PORT` | Puerto en el que se ejecuta el servidor. |
-| `DB_HOST` | Host del servidor MySQL. |
-| `DB_USER` | Usuario de conexión a MySQL. |
-| `DB_PASSWORD` | Contraseña del usuario de MySQL. |
-| `DB_NAME` | Nombre de la base de datos. |
-| `DB_PORT` | Puerto de conexión a MySQL. |
-| `AUTH_USER` | Usuario compartido para HTTP Basic Auth. |
-| `AUTH_PASS` | Contraseña compartida para HTTP Basic Auth. |
-
-No publicar el archivo `.env` ni almacenar credenciales reales en el repositorio. Se deben mantener los valores privados y utilizar una plantilla `.env.example` sin contraseñas reales.
-
-## 4. Instalación y ejecución
-
-### 4.1. Instalar dependencias
-
-```bash
-pnpm install
-```
-
-### 4.2. Crear la base de datos
-
-Ejecuta el script SQL del proyecto desde MySQL Workbench, DBeaver o la terminal.
-
-El script crea la base de datos `control_parqueo_sol` y sus tres tablas principales.
-
-### 4.3. Ejecutar en desarrollo
-
-```bash
-pnpm dev
-```
-
-### 4.4. Compilar y ejecutar en producción
-
-```bash
-pnpm build
-pnpm start
-```
-
-## 5. Funcionamiento general
-
-### 5.1. Conceptos principales
-
-| Concepto | Descripción |
-|---|---|
-| **Fecha de operación** | Fecha que aparece en el ticket físico y a la que corresponde el servicio de parqueo. |
-| **Fecha de captura** | Fecha y hora en que el ticket se ingresó digitalmente al sistema. Se genera automáticamente. |
-| **Jornada activa** | Conjunto de tickets que se están registrando o revisando y que todavía no se han archivado mediante el cierre. |
-| **Ticket activo** | Ticket que permanece en el registro operativo de la jornada. |
-| **Ticket eliminado** | Ticket retirado del registro activo mediante una anulación justificada y conservado en la auditoría de eliminaciones. |
-| **Ticket histórico registrado** | Ticket activo que se copia al histórico permanente cuando se cierra la jornada. |
-| **Balance** | Corrección de la hora de entrada y/o salida de un ticket para ajustar el cobro a la información física. |
-| **Casos especiales** | Indicadores de ticket perdido y aplicación de tarifa nocturna. |
-| **Cierre de jornada** | Operación que archiva los tickets activos y limpia el registro operativo después de la confirmación del reporte. |
-
-La fecha de operación y la fecha de captura son datos diferentes y deben conservarse por separado. Un ticket puede corresponder a una fecha física anterior y ser capturado digitalmente después.
-
-### 5.2. Flujo de trabajo
-
-El proceso se organiza alrededor de una jornada activa:
-
-1. **Registro:** los operadores transcriben los datos de los tickets físicos.
-2. **Finalización del registro:** se pasa a la revisión de la jornada sin eliminar ni archivar los tickets.
-3. **Auditoría:** se consultan los tickets activos, se corrigen horarios o se anulan registros con su respectiva justificación.
-4. **Reporte:** se genera un archivo Excel con los tickets activos y los eliminados.
-5. **Confirmación:** el operador verifica manualmente que el archivo se descargó y puede abrirse.
-6. **Cierre:** se archivan los tickets activos y se vacía el registro operativo únicamente después de completar correctamente el respaldo histórico.
-
-Generar o descargar el reporte no cierra la jornada. Los datos deben permanecer disponibles hasta que el operador confirme el cierre.
-
-### 5.3. Acceso y autenticación
-
-Las rutas operativas bajo `/sol/...` requieren autenticación HTTP Basic Auth mediante el encabezado:
-
-```http
-Authorization: Basic <base64>
-```
-
-El proyecto utiliza credenciales compartidas para los operadores. El navegador puede ofrecer guardar las credenciales para evitar introducirlas en cada acceso.
-
-### 5.4. Comportamiento general esperado
-
-- Mostrar mensajes claros de éxito, validación, error y confirmación.
-- Conservar los datos del formulario cuando una validación falle.
-- Diferenciar las acciones principales de las acciones destructivas.
-- Permitir cancelar una edición o eliminación sin modificar el ticket.
-- Evitar registros, anulaciones o cierres duplicados por doble clic o reenvío accidental.
-- Mostrar importes en quetzales (`Q`) y tiempos de forma legible.
-- Informar éxito únicamente cuando la operación haya terminado correctamente.
-- Mantener una interfaz utilizable en computadoras y tabletas.
-
-## 6. Reglas de negocio
-
-### 6.1. Horario de operación
-
-El horario regular del parqueo es de **04:30 a 17:30**.
-
-El tiempo facturable se acumula únicamente dentro de ese horario. El periodo durante el cual el parqueo permanece cerrado no se cobra como tiempo adicional.
-
-Si un vehículo continúa dentro del parqueo al llegar las 17:30, corresponde aplicar la tarifa nocturna. Si sale al día siguiente, se suman los periodos facturables anteriores al cierre y posteriores a la reapertura, además del recargo nocturno.
-
-### 6.2. Tarifas regulares
-
-| Tipo de vehículo | Tiempo | Importe |
-|---|---:|---:|
-| Carro | Hasta 30 minutos | Q5 |
-| Carro | Más de 30 minutos y hasta 1 hora | Q10 |
-| Carro | Cada bloque adicional de 30 minutos iniciado, después de la primera hora | Q5 |
-| Moto | Hasta 1 hora | Q5 |
-| Moto | Cada bloque adicional de 30 minutos iniciado, después de la primera hora | Q5 |
-
-Las fracciones de tiempo se redondean hacia arriba al siguiente intervalo aplicable.
-
-#### Ejemplos de cobro
-
-| Tiempo facturable | Carro | Moto |
-|---|---:|---:|
-| 30 minutos | Q5 | Q5 |
-| 31 minutos | Q10 | Q5 |
-| 40 minutos | Q10 | Q5 |
-| 1 hora | Q10 | Q5 |
-| 1 hora y 30 minutos | Q15 | Q10 |
-| 1 hora y 31 minutos | Q20 | Q15 |
-
-### 6.3. Recargos especiales
-
-| Caso | Recargo | Regla |
-|---|---:|---|
-| Tarifa nocturna | Q150 | Se aplica si el vehículo permanece dentro al llegar las 17:30 o si el operador activa manualmente el indicador. |
-| Ticket perdido | Q25 | Se suma al cobro por tiempo que corresponda. |
-
-Los recargos son acumulables. Cuando coinciden ambos casos especiales, el importe se calcula así:
-
-```text
-Total = Cobro por tiempo + Q150 (tarifa nocturna) + Q25 (ticket perdido)
-```
-
-#### Ejemplo de tarifa nocturna
-
-Si un carro entra a las 17:00 y permanece dentro cuando el parqueo cierra a las 17:30:
-
-- Tiempo facturable: 30 minutos = Q5.
-- Tarifa nocturna: Q150.
-- Total: **Q155**, sin incluir un eventual recargo por ticket perdido.
-
-No se cobra tiempo adicional durante el periodo nocturno de cierre.
-
-### 6.4. Estancias que continúan al día siguiente
-
-Ejemplo: un carro entra a las 16:00 y sale a las 07:10 del día siguiente.
-
-El cálculo considera:
-
-1. El tiempo facturable entre las 16:00 y las 17:30.
-2. El recargo nocturno de Q150.
-3. El tiempo facturable entre las 04:30 y las 07:10 del día siguiente.
-
-El periodo entre las 17:30 y las 04:30 no se suma como tiempo facturable.
-
-**Importante:** la duración total transcurrida no equivale al tiempo facturable. El periodo de cierre nocturno no se cobra como tiempo adicional, aunque sí puede activar el recargo nocturno.
-
-El parqueo no permite estancias de varios días. El formulario captura una sola fecha de operación; no debe inferirse una estancia de varios días a partir de dos horas.
-
-### 6.5. Registro de tickets
-
-El formulario debe capturar:
-
-- Fecha de operación.
-- Número de ticket.
-- Tipo de vehículo (`CARRO` o `MOTO`).
-- Hora de entrada.
-- Hora de salida.
-- Indicador de ticket perdido.
-- Indicador de tarifa nocturna.
-
-El cobro se calcula automáticamente y es de solo lectura. El backend no debe aceptar como confiable un importe enviado por el cliente.
-
-Reglas de validación:
-
-- El número de ticket es obligatorio y no puede repetirse dentro de la jornada activa.
-- El número debe conservarse como texto para no alterar su representación.
-- El tipo de vehículo es obligatorio y solo admite `CARRO` o `MOTO`.
-- Las horas deben ser válidas.
-- La fecha de operación es obligatoria, permite fechas anteriores y no permite fechas futuras.
-- La hora de salida no puede ser idéntica a la hora de entrada.
-- Los indicadores de casos especiales deben registrarse explícitamente, incluso cuando estén desactivados.
-- Un ticket solo se considera guardado cuando la operación se confirma correctamente.
-
-El ticket físico se registra digitalmente después de que el vehículo ha salido. La hora de entrada debe corresponder a la anotada en el ticket físico; solo debe corregirse cuando exista un error de digitación u otro error de captura.
-
-### 6.6. Balance o edición de horarios
-
-El balance permite corregir únicamente la hora de entrada y/o la hora de salida.
-
-No se permite modificar desde esta operación:
-
-- Fecha de operación.
-- Número de ticket.
-- Tipo de vehículo.
-- Indicador de ticket perdido.
-- Indicador de tarifa nocturna.
-
-Reglas:
-
-- Debe cambiarse al menos una de las horas.
-- No se permite guardar exactamente el mismo horario que ya tenía el ticket.
-- Ambas horas deben ser válidas.
-- El motivo de edición es obligatorio.
-- El backend recalcula el tiempo y el importe.
-- El motivo y los valores actualizados se guardan junto con el ticket.
-- Un ticket puede editarse más de una vez.
-- La auditoría muestra el motivo de la última edición.
-- Cancelar no debe guardar cambios.
-
-La estructura actual conserva el motivo de edición vigente, no un historial completo de todas las versiones del ticket.
-
-### 6.7. Anulación de tickets
-
-La eliminación es una anulación justificada, no una eliminación silenciosa.
-
-Antes de confirmar se debe identificar claramente el ticket mediante, como mínimo:
-
-- Número de ticket.
-- Tipo de vehículo.
-- Importe calculado.
-- Motivo de eliminación.
-
-Al confirmar:
-
-1. Se copia a `auditoria_borrados` la información original del ticket.
-2. Se conserva su identificador original, fecha de captura y motivo de eliminación.
-3. La copia de auditoría debe completarse correctamente.
-4. Solo entonces se retira el ticket del registro activo.
-
-Si falla la escritura de auditoría, el ticket debe permanecer activo. Después de una anulación exitosa, deja de contribuir a los totales activos y aparece en la hoja **Tickets eliminados** del Excel.
-
-Cancelar la operación no debe modificar ningún dato.
-
-### 6.8. Orden y consulta
-
-- Los tickets se ordenan por fecha de operación descendente.
-- Cuando la fecha sea igual, se ordenan por número de ticket ascendente en orden numérico.
-- La búsqueda por número filtra los registros mostrados, pero no modifica los totales globales.
-- Los totales de auditoría se calculan únicamente con tickets activos.
-
-## 7. Estructura de la base de datos
-
-La base de datos se llama `control_parqueo_sol` y utiliza `utf8mb4` con la intercalación `utf8mb4_unicode_ci`.
-
-El script SQL define tres tablas principales.
-
-### 7.1. `registro_tickets`
-
-Tabla operativa que contiene los tickets de la jornada activa. Se limpia después de un cierre exitoso.
-
-| Campo | Tipo | Descripción |
+| Variable | Descripción | Valor por defecto si falta |
 |---|---|---|
-| `id_registro` | `INT` | Identificador interno y clave primaria autoincremental. |
-| `fecha_operacion` | `DATE` | Fecha del ticket físico. |
-| `numero_ticket` | `VARCHAR(20)` | Número del talonario; único en esta tabla. |
-| `tipo_vehiculo` | `ENUM('CARRO', 'MOTO')` | Tipo de vehículo. |
-| `hora_entrada` | `TIME` | Hora de entrada del ticket físico. |
-| `hora_salida` | `TIME` | Hora de salida del ticket físico. |
-| `minutos_estacionado` | `INT` | Duración calculada por la base de datos; contempla una salida posterior a medianoche. |
-| `costo` | `INT` | Importe calculado en quetzales enteros. |
-| `es_ticket_perdido` | `BOOLEAN` | Indicador de ticket perdido. |
-| `aplica_tarifa_noche` | `BOOLEAN` | Indicador de tarifa nocturna. |
-| `motivo_edicion` | `TEXT` | Motivo de la última edición; `NULL` si no se ha editado. |
-| `fecha_captura` | `TIMESTAMP` | Fecha y hora de creación del registro digital. |
+| `PORT` | Puerto del servidor | `3000` |
+| `DB_HOST` | Host de MySQL | `localhost` |
+| `DB_PORT` | Puerto de MySQL | `3306` |
+| `DB_USER` | Usuario de MySQL | `root` |
+| `DB_PASSWORD` | Contraseña de MySQL | *(vacía)* |
+| `DB_NAME` | Nombre de la base de datos | `control_parqueo_sol` |
+| `AUTH_USER` | Usuario compartido de Basic Auth | `admin` |
+| `AUTH_PASS` | Contraseña compartida de Basic Auth | `admin123` |
 
-`minutos_estacionado` es una columna generada y almacenada. El importe `costo` debe ser calculado por la lógica de negocio.
+> ⚠️ **Seguridad:** define siempre `AUTH_USER` y `AUTH_PASS`; los valores por defecto son públicos en el código. No subas `.env` al repositorio (ya está en `.gitignore`). Evita `:` en la contraseña: el middleware separa usuario y clave por ese carácter.
 
-Índices definidos:
-
-- `idx_tickets_fecha_operacion` sobre `fecha_operacion`.
-- `idx_tickets_numero` sobre `numero_ticket`.
-
-### 7.2. `auditoria_borrados`
-
-Conserva una copia de los tickets anulados.
-
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `id_borrado` | `INT` | Identificador del evento de eliminación. |
-| `id_registro_original` | `INT` | Identificador que tenía el ticket en la tabla operativa. |
-| `fecha_operacion` | `DATE` | Fecha del ticket físico. |
-| `numero_ticket` | `VARCHAR(20)` | Número del ticket. |
-| `tipo_vehiculo` | `ENUM('CARRO', 'MOTO')` | Tipo de vehículo. |
-| `hora_entrada` | `TIME` | Hora de entrada original. |
-| `hora_salida` | `TIME` | Hora de salida original. |
-| `minutos_estacionado` | `INT` | Duración original. |
-| `costo` | `INT` | Importe original. |
-| `es_ticket_perdido` | `BOOLEAN` | Indicador original de ticket perdido. |
-| `aplica_tarifa_noche` | `BOOLEAN` | Indicador original de tarifa nocturna. |
-| `motivo_eliminacion` | `TEXT` | Justificación obligatoria de la anulación. |
-| `fecha_captura_original` | `TIMESTAMP` | Fecha y hora de captura del ticket original. |
-| `fecha_eliminacion` | `TIMESTAMP` | Fecha y hora de eliminación. |
-
-Esta tabla no debe utilizarse como registro de errores generales de la aplicación ni de fallos de descarga.
-
-Índice definido:
-
-- `idx_borrados_fecha_operacion` sobre `fecha_operacion`.
-
-### 7.3. `auditoria_tickets_registrados`
-
-Histórico permanente de los tickets activos que se archivan al cerrar una jornada.
-
-| Campo | Tipo | Descripción |
-|---|---|---|
-| `id_historico` | `INT` | Identificador del registro histórico. |
-| `id_registro_original` | `INT` | Identificador que tenía el ticket en la tabla operativa. |
-| `fecha_operacion` | `DATE` | Fecha del ticket físico. |
-| `numero_ticket` | `VARCHAR(20)` | Número del ticket. |
-| `tipo_vehiculo` | `ENUM('CARRO', 'MOTO')` | Tipo de vehículo. |
-| `hora_entrada` | `TIME` | Hora de entrada. |
-| `hora_salida` | `TIME` | Hora de salida. |
-| `minutos_estacionado` | `INT` | Duración registrada. |
-| `costo` | `INT` | Importe calculado. |
-| `es_ticket_perdido` | `BOOLEAN` | Indicador de ticket perdido. |
-| `aplica_tarifa_noche` | `BOOLEAN` | Indicador de tarifa nocturna. |
-| `motivo_edicion` | `TEXT` | Motivo de la última edición, si existe. |
-| `fecha_captura` | `TIMESTAMP` | Fecha y hora de captura original. |
-| `fecha_cierre_sistema` | `TIMESTAMP` | Fecha y hora en que se archivó el ticket. |
-
-Índices definidos:
-
-- `idx_historico_fecha_operacion` sobre `fecha_operacion`.
-- `idx_historico_numero` sobre `numero_ticket`.
-
-### 7.4. Consideraciones del modelo de datos
-
-- Las tablas de auditoría conservan el identificador que tenía el registro original.
-- El histórico conserva el motivo de edición vigente al momento del cierre, pero no registra cada versión de las ediciones.
-- La estructura actual no incluye una tabla específica para controlar el estado o identificador de la jornada.
-- Tampoco incluye entidades específicas para registrar exportaciones, resultados de descarga o errores generales.
-- La unicidad de `numero_ticket` está definida en `registro_tickets`, no en las tablas de auditoría. Esto permite conservar números repetidos en jornadas distintas sin exigir unicidad histórica global.
-- Los registros históricos no deben volver a aparecer como tickets activos en una jornada nueva.
-- Si una regla requiere información que el modelo actual no conserva, debe señalarse y evaluarse el cambio necesario antes de implementarla.
-
-## 8. Arquitectura y estructura del código
-
-La organización documentada del backend es modular:
+## 5. Estructura del código
 
 ```text
 backend/
 ├── src/
-│   ├── config/        # Variables de entorno y pool de conexión MySQL
-│   ├── controllers/   # Controladores Express: req, res y códigos HTTP
-│   ├── dtos/          # Tipado de entradas y salidas
-│   ├── middlewares/   # Basic Auth, 404, errores y protección de jornada
-│   ├── models/        # Consultas SQL y transacciones
-│   ├── routes/        # Rutas y control de métodos HTTP
-│   ├── services/      # Lógica de negocio, tarifas y generación de Excel
-│   ├── utils/         # Sanitización, validaciones y formato de tiempo
-│   ├── app.ts         # Configuración central de Express
-│   └── index.ts       # Punto de entrada del servidor
-├── .env.example       # Plantilla de variables de entorno
+│   ├── config/
+│   │   ├── env.ts                  # Lectura de variables de entorno
+│   │   └── db.ts                   # Pool de MySQL (zona horaria -06:00)
+│   ├── controllers/                # req/res y códigos HTTP
+│   │   ├── ticket.controller.ts
+│   │   ├── tarifa.controller.ts
+│   │   ├── jornada.controller.ts
+│   │   ├── reporte.controller.ts
+│   │   └── cierre.controller.ts
+│   ├── dtos/                       # Tipado de entradas y salidas
+│   ├── middlewares/
+│   │   ├── auth.middleware.ts              # Basic Auth
+│   │   ├── verificar-jornada.middleware.ts # 409 si la jornada ya fue cerrada
+│   │   ├── not-found.middleware.ts         # 404 de rutas inexistentes
+│   │   └── error.middleware.ts             # Manejador global de errores
+│   ├── models/                     # Consultas SQL y transacciones
+│   ├── routes/                     # Endpoints y control de métodos (405)
+│   ├── services/                   # Lógica de negocio (tarifas, tickets, jornada, Excel, cierre)
+│   ├── utils/                      # Validadores y formato de tiempo
+│   ├── app.ts                      # Configuración de Express y montaje de rutas
+│   ├── index.ts                    # Punto de entrada
+│   ├── setup.ts                    # (vacío)
+│   └── script.sql                  # Esquema de la base de datos
+├── .env.example
 ├── package.json
 └── tsconfig.json
 ```
 
-### Responsabilidades por capa
-
 | Capa | Responsabilidad |
 |---|---|
-| `config` | Configuración del entorno y conexión con MySQL. |
-| `controllers` | Recibir solicitudes, invocar servicios y responder con códigos HTTP. |
-| `dtos` | Definir la estructura y tipado de los datos de entrada y salida. |
-| `middlewares` | Autenticación, manejo de errores, rutas no encontradas y protección de jornada. |
-| `models` | Ejecutar consultas SQL y operaciones transaccionales. |
-| `routes` | Declarar endpoints y restringir los métodos HTTP permitidos. |
-| `services` | Implementar las reglas del dominio, cálculos y generación de Excel. |
-| `utils` | Funciones auxiliares de validación, sanitización y formato. |
+| `routes` | Declarar endpoints y rechazar verbos no soportados con `405` |
+| `controllers` | Validar la entrada, invocar servicios y traducir errores a códigos HTTP |
+| `services` | Reglas del dominio: cálculo de tarifas, edición, anulación, Excel, cierre |
+| `models` | SQL parametrizado y transacciones |
+| `utils` | Validación y normalización de datos |
+| `middlewares` | Autenticación, protección de jornada, errores |
 
-## 9. API REST
+## 6. Conceptos clave y flujo de la jornada
 
-Todas las rutas operativas bajo `/sol/...` requieren HTTP Basic Auth.
+| Concepto | Descripción |
+|---|---|
+| **Fecha de operación** | Fecha del ticket físico. Puede ser anterior a hoy, nunca futura. |
+| **Fecha de captura** | Fecha y hora en que se digitó el ticket (automática). |
+| **Jornada activa** | Tickets presentes en `registro_tickets`, aún no archivados. |
+| **Ticket activo / eliminado** | En el registro operativo / anulado y conservado en `auditoria_borrados`. |
+| **Balance** | Corrección de la hora de entrada y/o salida de un ticket. |
+| **Casos especiales** | Ticket perdido y tarifa nocturna. |
+| **Cierre de jornada** | Archiva los tickets activos en el histórico y vacía el registro operativo. |
 
-Las rutas deben responder con `405 Method Not Allowed` cuando se utilice un verbo HTTP no soportado.
+**Flujo:**
 
-### 9.1. Autenticación y verificación
+1. **Registro** de tickets → 2. **Finalizar registro** (pasa la jornada a fase `AUDITORIA`, sin borrar nada) → 3. **Auditoría** (editar o anular) → 4. **Generar Excel** → 5. El operador **verifica el archivo** → 6. **Cierre** (archivar y vaciar).
 
-| Método | Endpoint | Descripción | Respuestas principales |
+Generar o descargar el Excel **no** cierra la jornada.
+
+## 7. Reglas de negocio
+
+### 7.1. Horario y tiempo facturable
+
+- Horario regular: **04:30 a 17:30**.
+- El tiempo facturable se acumula **solo dentro de ese horario**. El periodo cerrado (17:30–04:30) no se cobra como tiempo adicional.
+- Si el vehículo continúa dentro a las 17:30, se aplica la **tarifa nocturna**.
+- Estancia hasta el día siguiente: se suma el tiempo facturable antes del cierre y después de la reapertura, más el recargo nocturno.
+- No se permiten estancias de varios días; solo se captura una fecha y no se infiere una duración mayor a partir de dos horas.
+
+### 7.2. Tarifas
+
+| Vehículo | Tiempo | Importe |
+|---|---|---:|
+| Carro | Hasta 30 min | Q5 |
+| Carro | De 31 min a 1 h | Q10 |
+| Carro | Cada bloque de 30 min iniciado después de la primera hora | +Q5 |
+| Moto | Hasta 1 h | Q5 |
+| Moto | Cada bloque de 30 min iniciado después de la primera hora | +Q5 |
+
+Las fracciones se **redondean hacia arriba** al intervalo aplicable.
+
+| Tiempo facturable | Carro | Moto |
+|---|---:|---:|
+| 30 min | Q5 | Q5 |
+| 31 min | Q10 | Q5 |
+| 40 min | Q10 | Q5 |
+| 1 h | Q10 | Q5 |
+| 1 h 30 min | Q15 | Q10 |
+| 1 h 31 min | Q20 | Q15 |
+
+### 7.3. Recargos (acumulables)
+
+| Caso | Recargo | Cuándo aplica |
+|---|---:|---|
+| Tarifa nocturna | Q150 | La casilla está marcada **o** la estancia cruza el cierre (salida ≤ entrada, salida > 17:30 o entrada ≥ 17:30) |
+| Ticket perdido | Q25 | La casilla está marcada |
+
+```text
+Total = cobro por tiempo + Q150 (tarifa nocturna) + Q25 (ticket perdido)
+```
+
+**Ejemplos**
+
+- Carro, entra 17:00 y sigue dentro al cierre: Q5 (30 min) + Q150 = **Q155**.
+- Carro, entra 16:00 y sale 07:10 del día siguiente: tiempo 16:00–17:30 + Q150 + tiempo 04:30–07:10.
+
+### 7.4. Balance (edición de horarios)
+
+- Solo se pueden modificar **hora de entrada, hora de salida y motivo**.
+- Debe cambiar al menos una hora (no se acepta el mismo horario).
+- El backend recalcula minutos e importe y guarda el motivo en el ticket (solo se conserva el **motivo de la última edición**).
+- Al recalcular, el indicador de **tarifa nocturna se vuelve a determinar** según el nuevo horario (ver [limitaciones](#14-limitaciones-y-notas-técnicas)).
+
+### 7.5. Anulación
+
+1. Se copia el ticket completo a `auditoria_borrados` junto con el motivo.
+2. Solo si esa copia se guardó, se elimina de `registro_tickets` (todo en una transacción con bloqueo de fila).
+3. El ticket deja de sumar en los totales y aparece en la hoja **Tickets Eliminados** del Excel.
+
+### 7.6. Orden y búsqueda
+
+- Orden: fecha de operación **descendente** y, a igual fecha, número de ticket **ascendente numérico**.
+- La búsqueda por número es **parcial** (`LIKE %valor%`) y filtra solo la lista; los **totales** siempre se calculan sobre todos los tickets activos.
+
+## 8. API REST
+
+Todas las rutas `/sol/...` requieren `Authorization: Basic <base64(usuario:clave)>`. Los cuerpos son JSON y los verbos no soportados responden `405` con la cabecera `Allow`.
+
+### 8.1. Resumen de endpoints
+
+| Método | Endpoint | Descripción | Respuestas |
 |---|---|---|---|
-| `GET` | `/sol/acceso/verificar` | Valida las credenciales Basic Auth y confirma el acceso. | `200 OK`, `401 Unauthorized` |
+| `GET` | `/sol/acceso/verificar` | Valida las credenciales | `200`, `401` |
+| `POST` | `/sol/tarifas/calcular` | Simula el cobro (no guarda nada) | `200`, `400` |
+| `POST` | `/sol/tickets` | Registra un ticket | `201`, `400`, `409` |
+| `GET` | `/sol/tickets/activos` | Lista tickets activos y totales (`?numero=`) | `200` |
+| `GET` | `/sol/tickets/buscar/:numero` | Detalle por número físico | `200`, `400`, `404` |
+| `PATCH` | `/sol/tickets/:id/balance` | Corrige horarios y recalcula | `200`, `400`, `404`, `409` |
+| `DELETE` | `/sol/tickets/:id` | Anula el ticket con motivo | `200`, `400`, `404`, `409` |
+| `GET` | `/sol/jornada/estado` | Estado de la jornada | `200` |
+| `POST` | `/sol/jornada/finalizar-registro` | Pasa la jornada a fase `AUDITORIA` | `200` |
+| `GET` | `/sol/reportes/excel` | Genera y descarga el Excel | `200` (binario), `500` |
+| `POST` | `/sol/cierre/confirmar` | Archiva y vacía la jornada | `200`, `409`, `500` |
+| `GET` | `/sol/cierre/historico` | Consulta el histórico (`?fecha=YYYY-MM-DD`) | `200` |
 
-### 9.2. Cálculo de tarifas
+> `:id` es el identificador interno (`idRegistro`); `:numero` es el número impreso en el ticket. El histórico es de **solo lectura**.
 
-| Método | Endpoint | Descripción | Datos principales |
-|---|---|---|---|
-| `POST` | `/sol/tarifas/calcular` | Simula el cobro sin guardar información en la base de datos. | `horaEntrada`, `horaSalida`, `tipoVehiculo`, `aplicaTarifaNoche`, `esTicketPerdido` |
+### 8.2. Formato de las respuestas
 
-Respuestas principales: `200 OK`, `400 Bad Request`.
+Las rutas operativas responden con este formato:
 
-Ejemplo de estructura del cuerpo:
+```jsonc
+// Éxito
+{ "ok": true, "mensaje": "…", "data": { … } }
+
+// Error
+{ "ok": false, "mensaje": "…", "codigo": "JORNADA_CERRADA" }   // "codigo" solo en algunos conflictos
+```
+
+`/sol/acceso/verificar` y el middleware de autenticación usan `{ "success": …, "message": … }`.
+
+### 8.3. Ejemplos
+
+**Calcular tarifa** — `POST /sol/tarifas/calcular`
 
 ```json
 {
@@ -468,197 +296,261 @@ Ejemplo de estructura del cuerpo:
 }
 ```
 
-### 9.3. Registro y consulta de tickets
-
-| Método | Endpoint | Descripción | Datos / parámetros | Respuestas principales |
-|---|---|---|---|---|
-| `POST` | `/sol/tickets` | Registra un ticket y valida la unicidad del número en la jornada activa. | `fechaOperacion`, `numeroTicket`, `tipoVehiculo`, `horaEntrada`, `horaSalida` e indicadores especiales. | `201 Created`, `400 Bad Request`, `409 Conflict` |
-| `GET` | `/sol/tickets/activos` | Lista los tickets activos y los totales de auditoría. | Query opcional: `?numero=...` | `200 OK` |
-| `GET` | `/sol/tickets/buscar/:numero` | Devuelve el detalle de un ticket activo por su número físico. | Parámetro de ruta `:numero`. | `200 OK`, `404 Not Found` |
-| `PATCH` | `/sol/tickets/:id/balance` | Corrige horarios y recalcula el importe. | `horaEntrada`, `horaSalida`, `motivoEdicion`. | `200 OK`, `400 Bad Request`, `409 Conflict` |
-| `DELETE` | `/sol/tickets/:id` | Anula el ticket y lo conserva en `auditoria_borrados`. | `motivoEliminacion`. | `200 OK`, `404 Not Found`, `409 Conflict` |
-
-### 9.4. Estado de jornada
-
-| Método | Endpoint | Descripción | Respuestas principales |
-|---|---|---|---|
-| `GET` | `/sol/jornada/estado` | Devuelve el estado de la jornada, la fecha operativa y la cantidad de tickets activos. | `200 OK` |
-
-### 9.5. Reportes Excel
-
-| Método | Endpoint | Descripción | Salida |
-|---|---|---|---|
-| `GET` | `/sol/reportes/excel` | Genera y descarga el reporte sin vaciar la jornada. | Archivo `.xlsx` en flujo binario. |
-
-Nombre de archivo documentado:
-
-```text
-Reporte_Parqueo_DD_MM_YYYY.xlsx
+```json
+{
+  "ok": true,
+  "data": {
+    "minutosEstacionado": 90,
+    "costo": 15,
+    "desglose": {
+      "minutosTotales": 90,
+      "minutosFacturables": 90,
+      "costoBase": 15,
+      "recargoNoche": 0,
+      "recargoPerdido": 0
+    }
+  }
+}
 ```
 
-Respuesta principal: `200 OK`.
+**Registrar ticket** — `POST /sol/tickets`
 
-### 9.6. Cierre e histórico
+```json
+{
+  "fechaOperacion": "2026-11-04",
+  "numeroTicket": "160455",
+  "tipoVehiculo": "CARRO",
+  "horaEntrada": "12:00",
+  "horaSalida": "13:30",
+  "aplicaTarifaNoche": false,
+  "esTicketPerdido": false
+}
+```
 
-| Método | Endpoint | Descripción | Parámetros | Respuestas principales |
-|---|---|---|---|---|
-| `POST` | `/sol/cierre/confirmar` | Archiva permanentemente los tickets activos y vacía la jornada. | Sin parámetros documentados. | `200 OK`, `409 Conflict` |
-| `GET` | `/sol/cierre/historico` | Consulta tickets archivados. | Query opcional: `?fecha=YYYY-MM-DD` | `200 OK` |
+Respuesta `201`: `data` contiene el ticket creado:
 
-> **Nota sobre los contratos:** Para conocer todos los campos opcionales, formatos exactos, estructuras de respuesta y códigos de error específicos, consulta los DTO, validadores y controladores implementados.
+```json
+{
+  "idRegistro": 1,
+  "fechaOperacion": "2026-11-04",
+  "numeroTicket": "160455",
+  "tipoVehiculo": "CARRO",
+  "horaEntrada": "12:00:00",
+  "horaSalida": "13:30:00",
+  "minutosEstacionado": 90,
+  "tiempoLegible": "1 hr 30 min",
+  "costo": 15,
+  "esTicketPerdido": false,
+  "aplicaTarifaNoche": false,
+  "motivoEdicion": null,
+  "fechaCaptura": "2026-11-04T18:20:11.000Z"
+}
+```
 
-## 10. Reportes de Excel
+**Listar tickets activos** — `GET /sol/tickets/activos?numero=1604`
 
-El reporte contiene dos hojas:
+```json
+{
+  "ok": true,
+  "data": {
+    "resumen": {
+      "totalTickets": 42,
+      "totalCarros": 30,
+      "totalMotos": 12,
+      "totalPerdidos": 2,
+      "totalRecaudado": 1385
+    },
+    "tickets": [ { "idRegistro": 1, "numeroTicket": "160455", "…": "…" } ]
+  }
+}
+```
 
-### Hoja 1: Tickets registrados
+`resumen` siempre refleja **todos** los tickets activos; `tickets` está filtrado por `?numero=`.
 
-Incluye los tickets que continúan activos al momento de generar el archivo.
+**Corregir horario** — `PATCH /sol/tickets/:id/balance`
 
-Campos esperados:
+```json
+{
+  "horaEntrada": "12:00",
+  "horaSalida": "13:45",
+  "motivoEdicion": "Correccion por digitacion erronea en la hora de salida"
+}
+```
 
-- Fecha de operación.
-- Número de ticket.
-- Tipo de vehículo.
-- Hora de entrada y hora de salida.
-- Minutos estacionados o duración legible.
-- Indicador de ticket perdido.
-- Indicador de tarifa nocturna.
-- Motivo de edición, cuando exista.
-- Importe cobrado.
-- Fecha y hora de captura.
+**Anular ticket** — `DELETE /sol/tickets/:id`
 
-### Hoja 2: Tickets eliminados
+```json
+{ "motivoEliminacion": "Numero de ticket digitado incorrectamente" }
+```
 
-Incluye los tickets anulados durante la jornada y conservados en la auditoría.
+**Estado de la jornada** — `GET /sol/jornada/estado`
 
-Campos esperados:
+```json
+{
+  "ok": true,
+  "data": {
+    "activa": true,
+    "totalTicketsActivos": 42,
+    "fechaOperacionActual": "2026-11-04",
+    "fase": "REGISTRO",
+    "totalRecaudado": 1385,
+    "totalEditados": 3,
+    "version": 17,
+    "mensaje": "Jornada activa en captura."
+  }
+}
+```
 
-- Fecha de operación.
-- Número de ticket.
-- Tipo de vehículo.
-- Hora de entrada y hora de salida.
-- Duración.
-- Indicadores de casos especiales.
-- Importe original.
-- Motivo de eliminación.
-- Fecha y hora de captura original.
-- Fecha y hora de eliminación.
+- `fase`: `REGISTRO` o `AUDITORIA`.
+- `version`: contador que aumenta con cada cambio (registro, edición, anulación, cambio de fase, cierre). Permite a los clientes detectar cambios de otros operadores.
+- `fechaOperacionActual`: la fecha de operación **más reciente** entre los tickets activos (`null` si no hay).
 
-### Reglas del reporte
+**Confirmar cierre** — `POST /sol/cierre/confirmar` (sin cuerpo)
 
-- Los encabezados deben ser claros y las columnas legibles.
-- Las fechas y horas deben utilizar formatos consistentes.
-- La presentación debe facilitar la lectura y revisión de la jornada.
-- Se pueden utilizar colores moderadamente para diferenciar encabezados, totales y alertas.
-- El reporte debe representar una misma instantánea lógica de la jornada.
-- Si ocurre una edición o eliminación durante la generación, se debe evitar un archivo que mezcle estados inconsistentes.
-- La generación del Excel no debe borrar ni archivar los datos activos.
+```json
+{
+  "ok": true,
+  "mensaje": "Cierre de jornada completado.",
+  "data": {
+    "fechaCierre": "2026-11-04T22:05:00.000Z",
+    "totalTicketsArchivados": 42,
+    "totalRecaudado": 1385,
+    "mensaje": "Jornada cerrada exitosamente. …"
+  }
+}
+```
 
-La fecha usada en el nombre del archivo corresponde a la fecha de referencia de la jornada de captura, no necesariamente a la fecha de operación impresa en cada ticket. La fecha de referencia se establece al iniciar la jornada y se mantiene durante esa jornada, incluidos los reintentos de descarga.
+**Descargar Excel**
 
-La descarga preparada por el servidor no demuestra que el navegador haya guardado el archivo correctamente. El operador debe verificarlo manualmente.
+```bash
+curl -u usuario:clave -OJ http://localhost:3000/sol/reportes/excel
+```
 
-## 11. Concurrencia y cierre de jornada
+## 9. Reporte Excel
 
-### 11.1. Trabajo simultáneo
+`GET /sol/reportes/excel` devuelve un archivo binario `.xlsx` con las cabeceras `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` y `Content-Disposition: attachment; filename="…"`.
 
-Dos o más operadores pueden utilizar la aplicación desde dispositivos diferentes y trabajar sobre el mismo conjunto central de registros.
+**Nombre del archivo:** `Reporte_Parqueo_DD_MM_YYYY.xlsx`. La fecha es la fecha de operación **más reciente de los tickets activos** (o la fecha actual si no hay tickets).
 
-La consistencia debe garantizarse en el backend y en la base de datos; no basta con bloquear botones en la interfaz.
-
-### 11.2. Registro duplicado
-
-`numero_ticket` debe ser único dentro de la jornada activa.
-
-Si dos operadores intentan registrar simultáneamente el mismo número:
-
-- Solo una operación puede completarse.
-- La otra debe recibir una respuesta de conflicto o duplicado.
-- La validación debe realizarse al guardar, no únicamente cuando el operador escribe el número.
-
-### 11.3. Ediciones y eliminaciones concurrentes
-
-Si un ticket fue editado o eliminado por otro operador antes de confirmar una acción, el backend debe validar nuevamente su estado actual y evitar sobrescribir silenciosamente cambios más recientes.
-
-### 11.4. Cierre seguro
-
-El cierre debe realizarse como una operación transaccional:
-
-1. Verificar que la jornada todavía contiene los registros que se van a cerrar.
-2. Comprobar que no existe otro cierre completado.
-3. Bloquear los registros necesarios para evitar modificaciones concurrentes.
-4. Copiar los tickets activos a `auditoria_tickets_registrados`.
-5. Comprobar que el archivado se completó correctamente.
-6. Solo entonces retirar los tickets del registro operativo.
-7. Marcar la jornada como cerrada y permitir iniciar una nueva.
-
-Si falla el respaldo, no se deben borrar los registros activos. La confirmación repetida no debe duplicar el histórico ni provocar un segundo cierre.
-
-### 11.5. Detección de una jornada cerrada por otro operador
-
-Si un operador confirma el cierre mientras otro permanece en auditoría:
-
-- Se deben impedir nuevas ediciones, eliminaciones o registros sobre la jornada cerrada.
-- El backend debe detectar que la jornada fue cerrada o reiniciada por otro operador.
-- La API debe responder con un conflicto identificable, como `JORNADA_CERRADA` o `JORNADA_YA_CERRADA`.
-- La interfaz debe informar que otro operador reinició el sistema para una nueva jornada y ofrecer volver al formulario inicial.
-- El segundo operador no debe repetir el cierre ni modificar los datos de la jornada anterior.
-
-## 12. Validaciones e integridad
-
-- Los importes se calculan en el backend y se vuelven a validar al guardar o editar.
-- Las operaciones de edición y eliminación deben identificar inequívocamente el ticket.
-- Los motivos de edición y eliminación son obligatorios.
-- Los datos de auditoría deben conservar una copia fiel de los valores existentes al momento de la operación.
-- Los registros activos no deben borrarse si falla la escritura de auditoría o del histórico.
-- Las entradas deben validarse por tipo, formato, longitud y reglas de negocio.
-- Los motivos deben aceptar texto claro, sin emojis ni caracteres de control. Se permite texto normal con letras, números, espacios y puntuación común.
-- El texto del usuario debe tratarse como dato, nunca como una instrucción ejecutable.
-- La validación no debe rechazar texto legítimo solo porque contenga una palabra que también pueda aparecer en una consulta.
-- Los mensajes de error no deben exponer información interna innecesaria.
-- Las operaciones críticas deben protegerse contra duplicaciones accidentales, solicitudes repetidas y cambios concurrentes.
-- Los reportes deben generarse a partir de datos persistidos, no de cifras calculadas únicamente en la interfaz.
-- Los totales deben derivarse de los tickets activos y excluir los eliminados.
-- Se deben distinguir la fecha de operación, fecha de captura, fecha de eliminación y fecha de cierre.
-
-## 13. Códigos de respuesta HTTP
-
-Los siguientes códigos aparecen en los contratos documentados:
-
-| Código | Significado | Uso en el sistema |
+| Hoja | Contenido | Columnas |
 |---|---|---|
-| `200 OK` | Solicitud procesada correctamente. | Consultas, balances, anulaciones, reportes y cierres exitosos. |
-| `201 Created` | Recurso creado correctamente. | Registro de tickets. |
-| `400 Bad Request` | Datos inválidos o solicitud que incumple una regla. | Validaciones y horarios inválidos. |
-| `401 Unauthorized` | Credenciales ausentes o incorrectas. | Autenticación Basic Auth. |
-| `404 Not Found` | Recurso no encontrado. | Búsqueda o modificación de un ticket inexistente. |
-| `405 Method Not Allowed` | Método HTTP no permitido para la ruta. | Uso de un verbo no soportado. |
-| `409 Conflict` | Conflicto con el estado actual de los datos. | Número duplicado, jornada cerrada o cierre concurrente. |
+| **Tickets Registrados** | Tickets activos | No. Ticket, Fecha Operación, Vehículo, Hora Entrada, Hora Salida, Tiempo Estacionado, Minutos, Tarifa Noche, Ticket Perdido, Cobro Total (Q), Estado Edición, Motivo Edición, Fecha Captura Digital |
+| **Tickets Eliminados** | Tickets anulados de esa fecha de operación | No. Ticket, Fecha Operación, Vehículo, Hora Entrada, Hora Salida, Tiempo Estacionado, Minutos, Cobro Original (Q), Motivo Anulación, Captura Original, Fecha Anulación |
 
-## 14. Consideraciones y límites actuales
+Notas:
 
-- La base de datos actual no contiene una tabla específica de jornadas. El control del estado de la jornada debe resolverse mediante el diseño vigente del backend o evaluarse como una ampliación explícita del esquema.
-- No existe una tabla específica para historial completo de cada edición. Actualmente se conserva el motivo de la última edición en el ticket activo y en el histórico al momento del cierre.
-- No existe una tabla específica para registrar intentos o resultados de exportación y descarga.
-- La base de datos calcula `minutos_estacionado` a partir de dos horas y contempla una salida posterior a medianoche. La regla operativa del parqueo no permite estancias de varios días y el formulario solo captura una fecha.
-- El registro histórico es de solo lectura después del cierre.
-- No se deben inventar reglas de negocio para situaciones que no estén definidas. Si aparece una contradicción entre los requisitos, las pantallas y la estructura de datos, debe documentarse antes de cambiar el comportamiento.
-- La generación del reporte, la confirmación manual de descarga y el cierre de jornada son acciones distintas y no deben confundirse.
+- Los encabezados tienen color (gris azulado oscuro en la hoja de activos, rojo oscuro en la de eliminados).
+- Los importes se escriben como texto con formato `Q 15.00`; las fechas de captura y anulación usan el formato regional `es-GT`.
+- Generar el reporte **no modifica** ningún dato.
+- El estado “Archivo emitido” solo significa que el servidor produjo el archivo; el operador debe comprobar manualmente que se guardó y se abre.
 
----
+## 10. Cierre de jornada y concurrencia
 
-## Instrucciones para mantenimiento y desarrollo
+### 10.1. Cierre seguro (`POST /sol/cierre/confirmar`)
 
-Antes de implementar o modificar una función:
+Se ejecuta en **una sola transacción**:
 
-1. Revisar las reglas de negocio y el flujo operativo descritos en este README.
-2. Identificar qué requisito funcional se está implementando y qué datos lo respaldan.
-3. Aplicar las tarifas confirmadas; no inventar reglas para escenarios no definidos.
-4. Si se detectan contradicciones entre el comportamiento esperado y la estructura de datos, explícarlas antes de cambiar la lógica.
-5. Priorizar la integridad de los tickets, la trazabilidad de ediciones y eliminaciones, el cierre seguro y la consistencia entre operadores.
-6. No confundir la generación del reporte con la confirmación de descarga ni con el cierre de jornada.
-7. No borrar datos activos antes de confirmar que se archivaron correctamente.
-8. Conservar los nombres actuales de campos y tablas cuando sean adecuados. Justificar cualquier modificación del esquema.
-9. No asumir tecnologías o herramientas distintas de las definidas para el proyecto.
+1. `SELECT * FROM registro_tickets FOR UPDATE` (bloquea los registros).
+2. Si no hay tickets → `409 JORNADA_YA_CERRADA` (otro operador ya cerró).
+3. `INSERT … SELECT` hacia `auditoria_tickets_registrados`.
+4. Verifica que las filas copiadas coincidan con las activas; si no, `ROLLBACK` (`FALLO_RESPALDO_HISTORICO`).
+5. `DELETE FROM registro_tickets`.
+6. `COMMIT` y la fase vuelve a `REGISTRO`.
 
+Si algo falla, no se borra ningún ticket activo. Repetir la confirmación no duplica el histórico.
+
+### 10.2. Registro duplicado
+
+`numero_ticket` tiene restricción `UNIQUE` en `registro_tickets`. Antes de insertar se comprueba si existe (`409`), y el índice único protege el caso de dos operadores guardando el mismo número a la vez.
+
+### 10.3. Ediciones y anulaciones concurrentes
+
+`PATCH /:id/balance` y `DELETE /:id` pasan por `verificarJornadaActivaMiddleware`: si ya no hay tickets activos responden `409` con `codigo: "JORNADA_CERRADA"` y el mensaje *“El sistema fue reiniciado para una nueva jornada por otro operador.”* La anulación además bloquea la fila (`FOR UPDATE`); si el ticket ya no existe, responde `404`.
+
+## 11. Base de datos
+
+Base `control_parqueo_sol`, motor InnoDB, `utf8mb4` / `utf8mb4_unicode_ci`. El script está en [`src/script.sql`](src/script.sql).
+
+El sistema maneja los tickets mediante dos tablas principales, dependiendo de su estado:
+
+- **`registro_tickets`:** almacena los tickets de la jornada activa. Cuando un operador anula un ticket, este se traslada a la tabla `auditoria_borrados`, junto con el motivo de la anulación.
+
+- **`auditoria_tickets_registrados`:** almacena los tickets de las jornadas que han sido cerradas y confirmadas. Esta tabla funciona como histórico permanente de los tickets registrados.
+
+De esta manera, el sistema conserva tanto los tickets anulados como los tickets de las jornadas finalizadas, permitiendo mantener un registro de las operaciones realizadas.
+
+### `registro_tickets` — registro operativo (se vacía al cerrar)
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `id_registro` | `INT` PK autoincremental | Identificador interno |
+| `fecha_operacion` | `DATE` | Fecha del ticket físico |
+| `numero_ticket` | `VARCHAR(20)` **UNIQUE** | Número del talonario |
+| `tipo_vehiculo` | `ENUM('CARRO','MOTO')` | Tipo de vehículo |
+| `hora_entrada`, `hora_salida` | `TIME` | Horas del ticket |
+| `minutos_estacionado` | `INT` *(columna generada, STORED)* | Duración; contempla salida pasada la medianoche |
+| `costo` | `INT` | Importe en quetzales enteros (lo calcula el backend) |
+| `es_ticket_perdido` | `BOOLEAN` | Ticket perdido |
+| `aplica_tarifa_noche` | `BOOLEAN` | Tarifa nocturna |
+| `motivo_edicion` | `TEXT NULL` | Motivo de la última edición |
+| `fecha_captura` | `TIMESTAMP` | Fecha/hora de digitación |
+
+Índices: `idx_tickets_fecha_operacion`, `idx_tickets_numero`.
+
+### `auditoria_borrados` — tickets anulados
+
+Copia fiel del ticket (`id_registro_original`, fecha, número, vehículo, horas, minutos, costo, indicadores) más `motivo_eliminacion` (obligatorio), `fecha_captura_original` y `fecha_eliminacion`. Índice: `idx_borrados_fecha_operacion`.
+
+### `auditoria_tickets_registrados` — histórico permanente
+
+Copia de los tickets activos al cerrar (`id_historico`, `id_registro_original`, datos del ticket, `motivo_edicion`, `fecha_captura`) más `fecha_cierre_sistema`. Índices: `idx_historico_fecha_operacion`, `idx_historico_numero`.
+
+### Consideraciones del modelo
+
+- La unicidad de `numero_ticket` existe solo en la tabla operativa: un mismo número puede repetirse en jornadas distintas dentro del histórico.
+- No existe una tabla de jornadas, de historial de ediciones ni de exportaciones. Del historial solo se conserva el motivo de la **última** edición.
+- La zona horaria del pool de MySQL está fijada en `-06:00` (Guatemala).
+
+## 12. Validaciones
+
+| Campo | Regla |
+|---|---|
+| `numeroTicket` | Obligatorio, solo dígitos, máximo 20 (se conserva como texto) |
+| `tipoVehiculo` | `CARRO` o `MOTO` (no distingue mayúsculas) |
+| `horaEntrada`, `horaSalida` | Formato 24 h `HH:mm` o `HH:mm:ss` (se normaliza a `HH:mm`); no pueden ser iguales |
+| `fechaOperacion` | `YYYY-MM-DD` o `DD/MM/YYYY`, fecha real de calendario, no futura |
+| `aplicaTarifaNoche`, `esTicketPerdido` | Booleanos; si no vienen, se toman como `false` |
+| `motivoEdicion`, `motivoEliminacion` | Obligatorios, entre **4 y 255** caracteres |
+
+**Caracteres permitidos en los motivos:** letras (incluye `á é í ó ú ñ ü`), números, espacios y `. , ; : ( ) # - _ /`. Se rechazan emojis, caracteres de control y otros símbolos (por ejemplo `¿ ? ¡ ! % @ + & " '`).
+
+El importe **nunca** se toma del cliente: se calcula siempre en el backend. Todas las consultas usan parámetros (`?`) y el texto del usuario se trata siempre como dato.
+
+## 13. Códigos HTTP y errores
+
+| Código | Significado | Dónde ocurre |
+|---|---|---|
+| `200` | Operación correcta | Consultas, balance, anulación, reporte, cierre |
+| `201` | Creado | Registro de ticket |
+| `400` | Datos inválidos | Validaciones, horarios, motivos, ID inválido |
+| `401` | Credenciales ausentes o incorrectas | Cualquier ruta `/sol/*` (incluye `WWW-Authenticate`) |
+| `404` | No encontrado | Ticket inexistente o ruta inexistente |
+| `405` | Método no permitido | Verbo no soportado (incluye `Allow`) |
+| `409` | Conflicto | Número duplicado, jornada cerrada o cierre repetido |
+| `500` | Error interno | Fallos inesperados (reporte, cierre, consultas) |
+
+**Códigos de conflicto identificables (`codigo`):**
+
+| `codigo` | Cuándo |
+|---|---|
+| `JORNADA_CERRADA` | `PATCH`/`DELETE` sobre una jornada que ya no tiene tickets activos |
+| `JORNADA_YA_CERRADA` | `POST /sol/cierre/confirmar` cuando otro operador ya cerró |
+| `ERROR_CIERRE` | Fallo inesperado durante el cierre (`500`) |
+
+## 14. Notas técnicas
+
+Observaciones basadas en el código actual:
+
+1. **El balance recalcula la tarifa nocturna** según el nuevo horario, por lo que puede reemplazar el indicador que se marcó manualmente al registrar. El indicador de ticket perdido sí se conserva.
+2. **`auditoria_borrados` no se vacía al cerrar la jornada.** El Excel solo incluye los eliminados cuya fecha de operación coincide con la fecha de referencia del reporte.
+3. **El nombre del Excel** usa la fecha de operación más reciente de los tickets activos, no una fecha fija guardada al iniciar la jornada.
