@@ -64,7 +64,7 @@ export class Auditoria implements OnInit, OnDestroy {
 
     const refreshSub = this.jornadaPolling.recargarAuditoria$.subscribe(() => {
       const filtroActual = this.buscadorControl.value || '';
-      this.cargarDatosAuditoria(filtroActual);
+      this.cargarDatosAuditoria(filtroActual, true);
     });
     this.subs.add(refreshSub);
   }
@@ -73,8 +73,10 @@ export class Auditoria implements OnInit, OnDestroy {
     this.subs.unsubscribe();
   }
 
-  public cargarDatosAuditoria(filtro?: string): void {
-    this.cargando.set(true);
+  public cargarDatosAuditoria(filtro?: string, silencioso: boolean = false): void {
+    if (!silencioso) {
+      this.cargando.set(true);
+    }
     this.mensajeError.set(null);
 
     this.auditoriaService.obtenerAuditoria(filtro).subscribe({
@@ -103,7 +105,8 @@ export class Auditoria implements OnInit, OnDestroy {
   public onTicketEditado(ticketActualizado: TicketActivoDto): void {
     this.ticketParaEditar.set(null);
     this.mensajeExito.set(`Boleta ${ticketActualizado.numeroTicket} corregida exitosamente.`);
-    this.cargarDatosAuditoria(this.buscadorControl.value || '');
+    // Notifica instantáneamente a las demás pestañas y refresca la tabla local
+    this.jornadaPolling.notificarTicketsModificados();
   }
 
   public abrirEliminar(ticket: TicketActivoDto): void {
@@ -113,7 +116,8 @@ export class Auditoria implements OnInit, OnDestroy {
   public onTicketAnulado(idRegistro: number): void {
     this.ticketParaAnular.set(null);
     this.mensajeExito.set('Boleta anulada y transferida al registro de auditoría.');
-    this.cargarDatosAuditoria(this.buscadorControl.value || '');
+    // Notifica instantáneamente a las demás pestañas y refresca la tabla local
+    this.jornadaPolling.notificarTicketsModificados();
   }
 
   public generarReporteExcel(): void {

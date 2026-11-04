@@ -1,6 +1,10 @@
 export interface EstadoJornadaResponseDto {
     activa: boolean;
     totalTicketsActivos: number;
-    fechaOperacionActual: string | null; // Fecha de los tickets que se están trabajando
+    fechaOperacionActual: string | null;
+    fase?: 'REGISTRO' | 'AUDITORIA';
+    totalRecaudado?: number;
+    totalEditados?: number;
+    version?: number;
     mensaje?: string;
 }
