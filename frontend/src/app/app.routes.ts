@@ -1,21 +1,23 @@
 import { Routes } from '@angular/router';
 import { Registro } from './features/registro/registro';
 import { registroGuard } from './core/guards/registro.guard';
+import { auditoriaGuard } from './core/guards/auditoria.guard';
 
 export const routes: Routes = [
     {
         path: '',
-        redirectTo: 'registro',
-        pathMatch: 'full'
+        pathMatch: 'full',
+        redirectTo: 'registro'
     },
     {
         path: 'registro',
         component: Registro,
-        canActivate: [registroGuard] // <-- Bloquea el acceso si ya se finalizó el registro
+        canActivate: [registroGuard] // Bloquea si ya finalizó el registro
     },
     {
         path: 'auditoria',
-        loadComponent: () => import('./features/auditoria/auditoria').then(m => m.Auditoria)
+        loadComponent: () => import('./features/auditoria/auditoria').then(m => m.Auditoria),
+        canActivate: [auditoriaGuard] // Bloquea si la jornada sigue en captura de tickets
     },
     {
         path: 'cierre',
