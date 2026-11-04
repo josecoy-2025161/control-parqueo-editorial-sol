@@ -36,9 +36,7 @@ export class JornadaPollingService {
             this.broadcastChannel.onmessage = (event) => {
                 if (event.data?.tipo === 'FASE_CAMBIADA') {
                     this.aplicarFase(event.data.fase);
-                    this.recargarAuditoria$.next();
                 } else if (event.data?.tipo === 'TICKETS_MODIFICADOS') {
-                    // Refresco inmediato en las demás pestañas/ventanas del mismo equipo
                     this.recargarAuditoria$.next();
                 }
             };
@@ -47,14 +45,13 @@ export class JornadaPollingService {
         window.addEventListener('storage', (event) => {
             if (event.key === 'sol_fase_jornada') {
                 this.aplicarFase((event.newValue as FaseJornada) || 'REGISTRO');
-                this.recargarAuditoria$.next();
             } else if (event.key === 'sol_tickets_sync') {
                 this.recargarAuditoria$.next();
             }
         });
     }
 
-    private aplicarFase(fase: FaseJornada): void {
+    public aplicarFase(fase: FaseJornada): void {
         this.faseActual.set(fase);
         if (fase === 'AUDITORIA') {
             localStorage.setItem('sol_fase_jornada', 'AUDITORIA');
@@ -91,21 +88,25 @@ export class JornadaPollingService {
                 const data = res.data;
                 this.estadoJornada.set(data);
 
-                // Serializamos todos los atributos clave para detectar ediciones y anulaciones
                 const estadoActual = `${data.totalTicketsActivos}_${data.fechaOperacionActual}_${data.fase}_${data.version}_${data.totalRecaudado}_${data.totalEditados}`;
 
-                if (this.ultimoEstadoSerializado && this.ultimoEstadoSerializado !== estadoActual) {
-                    this.recargarAuditoria$.next();
-                }
-                this.ultimoEstadoSerializado = estadoActual;
-
-                if (data.fase === 'AUDITORIA') {
-                    this.faseActual.set('AUDITORIA');
-                    localStorage.setItem('sol_fase_jornada', 'AUDITORIA');
-                    if (this.router.url.includes('/registro') || this.router.url === '/') {
-                        this.router.navigate(['/auditoria']);
+                // SI LA JORNADA SE CERRÓ (0 tickets, fase REGISTRO o activa === false)
+                if (data.totalTicketsActivos === 0 || data.fase === 'REGISTRO' || data.activa === false) {
+                    if (this.faseActual() === 'AUDITORIA' || this.router.url.includes('/auditoria') || this.router.url.includes('/cierre')) {
+                        this.aplicarFase('REGISTRO');
                     }
                 }
+                // SI LA JORNADA SIGUE ACTIVA
+                else {
+                    if (this.ultimoEstadoSerializado && this.ultimoEstadoSerializado !== estadoActual) {
+                        this.recargarAuditoria$.next();
+                    }
+                    if (data.fase === 'AUDITORIA') {
+                        this.aplicarFase('AUDITORIA');
+                    }
+                }
+
+                this.ultimoEstadoSerializado = estadoActual;
             }
         });
     }
@@ -136,7 +137,6 @@ export class JornadaPollingService {
 
     public notificarJornadaCerradaPorOtroOperador(): void {
         this.jornadaCerradaModalVisible.set(true);
-        this.faseActual.set('REGISTRO');
-        localStorage.removeItem('sol_fase_jornada');
+        this.aplicarFase('REGISTRO');
     }
 }
