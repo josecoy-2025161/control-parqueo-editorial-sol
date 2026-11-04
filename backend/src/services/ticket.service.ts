@@ -1,4 +1,5 @@
 import { TicketModel, TicketRow } from '../models/ticket.model.js';
+import { JornadaService } from './jornada.service.js';
 import { TarifaService } from './tarifa.service.js';
 import { ValidacionesGlobales } from '../utils/validation.util.js';
 import {
@@ -67,6 +68,7 @@ export class TicketService {
             throw new Error('Error al recuperar el ticket recién creado.');
         }
 
+        JornadaService.notificarCambio();
         return this.mapRowToDto(creado);
     }
 
@@ -128,6 +130,7 @@ export class TicketService {
         );
 
         const ticketActualizado = await TicketModel.findById(idRegistro);
+        JornadaService.notificarCambio();
         return this.mapRowToDto(ticketActualizado!);
     }
 
@@ -136,5 +139,6 @@ export class TicketService {
         if (!exito) {
             throw new Error('El ticket a eliminar no fue encontrado en la jornada activa.');
         }
+        JornadaService.notificarCambio();
     }
 }
