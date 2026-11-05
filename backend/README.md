@@ -65,6 +65,7 @@ Servidor backend corriendo exitosamente en el puerto 3000
 | `pnpm dev` | `tsx watch src/index.ts` | Desarrollo con recarga automática al guardar cambios |
 | `pnpm build` | `tsc` | Compila el proyecto a JavaScript en la carpeta `dist/` |
 | `pnpm start` | `node dist/index.js` | Ejecuta la versión compilada (producción) |
+| `pnpm run setup` | `tsx src/setup.ts` | Prepara el backend en 4 pasos|
 
 ### Prueba rápida
 
