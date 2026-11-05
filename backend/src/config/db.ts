@@ -13,6 +13,11 @@ export const pool = mysql.createPool({
     timezone: '-06:00', // Ajustado a la zona horaria de Guatemala
 });
 
+// Fija la zona horaria de cada sesión de MySQL (Guatemala no usa horario de verano)
+pool.pool.on('connection', (conn) => {
+    conn.query("SET time_zone = '-06:00'");
+});
+
 export const testDbConnection = async (): Promise<void> => {
     try {
         const connection = await pool.getConnection();

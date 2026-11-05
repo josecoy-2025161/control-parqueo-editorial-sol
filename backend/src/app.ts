@@ -10,6 +10,8 @@ import { basicAuthMiddleware } from './middlewares/auth.middleware.js';
 import { notFoundMiddleware } from './middlewares/not-found.middleware.js';
 import { globalErrorHandler } from './middlewares/error.middleware.js';
 import { ENV } from './config/env.js';
+import path from 'node:path';
+import fs from 'node:fs';
 
 const app: Application = express();
 
@@ -47,6 +49,21 @@ app.use('/sol/tickets', basicAuthMiddleware, ticketRoutes);
 app.use('/sol/jornada', basicAuthMiddleware, jornadaRoutes);
 app.use('/sol/reportes', basicAuthMiddleware, reporteRoutes);
 app.use('/sol/cierre', basicAuthMiddleware, cierreRoutes);
+
+// Frontend estático (Angular). En Docker queda en /app/public
+const carpetaFrontend = process.env.FRONTEND_DIR
+    ?? path.resolve(import.meta.dirname, '../../public');
+
+if (fs.existsSync(carpetaFrontend)) {
+    app.use(express.static(carpetaFrontend, { index: false, maxAge: '7d' }));
+    // Fallback SPA: cualquier GET que no sea /sol devuelve index.html
+    app.use((req, res, next) => {
+        if (req.method !== 'GET' || req.path.startsWith('/sol')) return next();
+        res.sendFile(path.join(carpetaFrontend, 'index.html'), {
+            headers: { 'Cache-Control': 'no-cache' },
+        });
+    });
+}
 
 // Middleware para rutas inexistentes (404)
 app.use(notFoundMiddleware);
