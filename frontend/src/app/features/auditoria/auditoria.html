@@ -1,0 +1,232 @@
+<main class="min-h-screen bg-sol-bg py-6 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-7xl mx-auto space-y-6">
+
+        <!-- Encabezado superior -->
+        <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <span class="text-xs font-bold tracking-wider text-emerald-600 uppercase block">Auditoría y
+                    Reporte</span>
+                <h1 class="text-2xl font-bold text-slate-800 mt-0.5">Auditoría de Tickets</h1>
+                <div class="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                    <span>Fecha de Jornada: <strong class="text-slate-700">{{ fechaOperacionActual() }}</strong></span>
+                    <span>•</span>
+                    <span>Total Registros: <strong class="text-slate-700">{{ resumen().totalTickets }}</strong></span>
+                </div>
+            </div>
+
+            <div>
+                <button type="button" (click)="generarReporteExcel()"
+                    [disabled]="generandoExcel() || resumen().totalTickets === 0"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-xs sm:text-sm rounded-md shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                        </path>
+                    </svg>
+                    @if (generandoExcel()) {
+                    <span>Generando archivo...</span>
+                    } @else {
+                    <span>Generar reporte Excel (.xlsx)</span>
+                    }
+                </button>
+            </div>
+        </header>
+
+        <!-- Aviso de Éxito -->
+        @if (mensajeExito()) {
+        <div
+            class="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex justify-between items-center">
+            <span>{{ mensajeExito() }}</span>
+            <button type="button" (click)="mensajeExito.set(null)"
+                class="text-emerald-600 hover:text-emerald-900 font-bold ml-2">✕</button>
+        </div>
+        }
+
+        <!-- Avisos de Error -->
+        @if (mensajeError()) {
+        <div
+            class="p-3 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex justify-between items-center">
+            <span>{{ mensajeError() }}</span>
+            <button type="button" (click)="mensajeError.set(null)"
+                class="text-rose-600 hover:text-rose-900 font-bold ml-2">✕</button>
+        </div>
+        }
+
+        <!-- Tarjetas de Resumen Global -->
+        <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Carros</span>
+                <span class="text-2xl font-extrabold text-slate-800 mt-1 block">{{ resumen().totalCarros }}</span>
+            </div>
+
+            <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Motos</span>
+                <span class="text-2xl font-extrabold text-slate-800 mt-1 block">{{ resumen().totalMotos }}</span>
+            </div>
+
+            <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Tickets
+                    Perdidos</span>
+                <span class="text-2xl font-extrabold text-rose-600 mt-1 block">{{ resumen().totalPerdidos }}</span>
+            </div>
+
+            <div class="bg-emerald-50/20 p-4 rounded-lg border border-slate-200 shadow-sm">
+                <span class="text-[11px] font-bold text-emerald-700 uppercase tracking-wider block">Total
+                    Recaudado</span>
+                <span class="text-2xl font-extrabold text-emerald-600 mt-1 block font-mono">
+                    {{ resumen().totalRecaudado | quetzal }}
+                </span>
+            </div>
+        </section>
+
+        <!-- Barra de búsqueda por número -->
+        <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center justify-between gap-4">
+            <div class="relative w-full max-w-xs">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    🔍
+                </span>
+                <input type="text" [formControl]="buscadorControl" placeholder="Buscar por no. de ticket..."
+                    class="w-full pl-9 pr-3 py-1.5 text-xs sm:text-sm border rounded-md border-slate-300 text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono" />
+            </div>
+            <span class="text-xs text-slate-500">
+                Mostrando {{ tickets().length }} boletas
+            </span>
+        </div>
+
+        <!-- Tabla Principal de Auditoría -->
+        <section class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+            <div class="overflow-x-auto tabla-scroll pb-1">
+                <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                    <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                        <tr>
+                            <th scope="col" class="px-4 py-3">Fecha</th>
+                            <th scope="col" class="px-4 py-3">No. Ticket</th>
+                            <th scope="col" class="px-4 py-3">Tipo</th>
+                            <th scope="col" class="px-4 py-3">Horario</th>
+                            <th scope="col" class="px-4 py-3">Tiempo</th>
+                            <th scope="col" class="px-4 py-3">Avisos</th>
+                            <th scope="col" class="px-4 py-3">Estado de Edición</th>
+                            <th scope="col" class="px-4 py-3">Total</th>
+                            <th scope="col" class="px-4 py-3 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100 text-slate-700">
+                        @if (cargando()) {
+                        <tr>
+                            <td colspan="9" class="px-4 py-8 text-center text-slate-500">
+                                <div
+                                    class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-600 mb-2">
+                                </div>
+                                <p class="text-xs">Cargando boletas de la jornada...</p>
+                            </td>
+                        </tr>
+                        } @else if (tickets().length === 0) {
+                        <tr>
+                            <td colspan="9" class="px-4 py-8 text-center text-slate-400">
+                                No se encontraron boletas registradas para esta jornada.
+                            </td>
+                        </tr>
+                        } @else {
+                        @for (ticket of tickets(); track ticket.idRegistro) {
+                        <tr class="hover:bg-slate-50/70 transition-colors">
+                            <!-- Fecha -->
+                            <td class="px-4 py-3 whitespace-nowrap font-medium text-slate-800">
+                                {{ ticket.fechaOperacion }}
+                            </td>
+
+                            <!-- No. Ticket -->
+                            <td class="px-4 py-3 whitespace-nowrap font-mono font-bold text-slate-900">
+                                {{ ticket.numeroTicket }}
+                            </td>
+
+                            <!-- Tipo -->
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                <span class="px-2 py-0.5 rounded text-[11px] font-semibold"
+                                    [ngClass]="ticket.tipoVehiculo === 'CARRO' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-amber-50 text-amber-700 border border-amber-200'">
+                                    {{ ticket.tipoVehiculo === 'CARRO' ? 'Carro' : 'Moto' }}
+                                </span>
+                            </td>
+
+                            <!-- Horario -->
+                            <td class="px-4 py-3 whitespace-nowrap font-mono text-[11px] text-slate-600">
+                                {{ ticket.horaEntrada }} — {{ ticket.horaSalida }}
+                            </td>
+
+                            <!-- Tiempo Legible -->
+                            <td class="px-4 py-3 whitespace-nowrap">
+                                {{ ticket.tiempoLegible | ticketDuration:ticket.minutosEstacionado }}
+                            </td>
+
+                            <!-- Avisos (Casos Especiales) -->
+                            <td class="px-4 py-3 whitespace-nowrap space-x-1">
+                                @if (ticket.esTicketPerdido) {
+                                <span
+                                    class="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 text-[10px] font-bold border border-rose-200">
+                                    Ticket perdido
+                                </span>
+                                }
+                                @if (ticket.aplicaTarifaNoche) {
+                                <span
+                                    class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-bold border border-indigo-200">
+                                    Tarifa noche
+                                </span>
+                                }
+                                @if (!ticket.esTicketPerdido && !ticket.aplicaTarifaNoche) {
+                                <span class="text-slate-400">—</span>
+                                }
+                            </td>
+
+                            <!-- Estado de Edición -->
+                            <td class="px-4 py-3">
+                                @if (ticket.motivoEdicion) {
+                                <div>
+                                    <span
+                                        class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-bold">Editado</span>
+                                    <p class="text-[11px] text-slate-500 truncate max-w-xs mt-0.5"
+                                        [title]="ticket.motivoEdicion">
+                                        {{ ticket.motivoEdicion }}
+                                    </p>
+                                </div>
+                                } @else {
+                                <span class="text-slate-400">Sin editar</span>
+                                }
+                            </td>
+
+                            <!-- Total -->
+                            <td class="px-4 py-3 whitespace-nowrap font-bold text-slate-900 font-mono">
+                                {{ ticket.costo | quetzal }}
+                            </td>
+
+                            <!-- Acciones (Editar y Eliminar) -->
+                            <td class="px-4 py-3 whitespace-nowrap text-center space-x-2">
+                                <button type="button" (click)="abrirEditar(ticket)"
+                                    class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[11px] rounded transition-colors cursor-pointer">
+                                    Editar
+                                </button>
+                                <button type="button" (click)="abrirEliminar(ticket)"
+                                    class="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-[11px] rounded transition-colors cursor-pointer">
+                                    Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                        }
+                        }
+                    </tbody>
+                </table>
+
+                <!-- Modales de Auditoría -->
+                @if (ticketParaEditar()) {
+                <app-balance-modal [ticket]="ticketParaEditar()!" (cancelado)="ticketParaEditar.set(null)"
+                    (guardado)="onTicketEditado($event)" />
+                }
+
+                @if (ticketParaAnular()) {
+                <app-anular-modal [ticket]="ticketParaAnular()!" (cancelado)="ticketParaAnular.set(null)"
+                    (anuladoExitoso)="onTicketAnulado($event)" />
+                }
+
+            </div>
+        </section>
+
+    </div>
+</main>

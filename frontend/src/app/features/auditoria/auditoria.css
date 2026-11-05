@@ -1,0 +1,23 @@
+/* Barra de desplazamiento horizontal visible y suave para la tabla en tablets */
+.tabla-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.tabla-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+
+.tabla-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+
+.tabla-scroll::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.tabla-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}

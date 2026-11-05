@@ -1,0 +1,107 @@
+<main class="min-h-screen bg-sol-bg py-10 px-4 sm:px-6 lg:px-8 flex items-center justify-center">
+    <div class="max-w-xl w-full bg-white rounded-xl border border-slate-200 shadow-lg p-6 sm:p-8 space-y-6">
+
+        <!-- Encabezado -->
+        <header class="text-center space-y-1">
+            <span class="text-xs font-bold tracking-wider text-rose-600 uppercase block">Paso Final • Jornada</span>
+            <h1 class="text-2xl font-black text-slate-800">Confirmación de Cierre</h1>
+            <p class="text-xs text-slate-500">
+                Revisión final y archivado permanente de las operaciones del parqueo.
+            </p>
+        </header>
+
+        @if (errorMensaje()) {
+        <div
+            class="p-3 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex justify-between items-center">
+            <span>{{ errorMensaje() }}</span>
+            <button type="button" (click)="errorMensaje.set(null)"
+                class="text-rose-600 hover:text-rose-900 font-bold ml-2">✕</button>
+        </div>
+        }
+
+        <!-- Tarjeta Consolidada de la Jornada -->
+        <section class="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3 text-xs">
+            <div class="flex justify-between items-center border-b border-slate-200 pb-2">
+                <span class="font-semibold text-slate-600">Fecha operativa:</span>
+                <strong class="text-slate-900">{{ fechaOperacion() }}</strong>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 py-1">
+                <div>
+                    <span class="text-slate-500 block">Total Carros:</span>
+                    <strong class="text-slate-800 text-sm">{{ resumen().totalCarros }}</strong>
+                </div>
+                <div>
+                    <span class="text-slate-500 block">Total Motos:</span>
+                    <strong class="text-slate-800 text-sm">{{ resumen().totalMotos }}</strong>
+                </div>
+                <div>
+                    <span class="text-slate-500 block">Tickets Perdidos:</span>
+                    <strong class="text-rose-600 text-sm">{{ resumen().totalPerdidos }}</strong>
+                </div>
+                <div>
+                    <span class="text-slate-500 block">Total Boletas:</span>
+                    <strong class="text-slate-800 text-sm">{{ resumen().totalTickets }}</strong>
+                </div>
+            </div>
+
+            <div
+                class="flex justify-between items-center border-t border-slate-200 pt-2 bg-emerald-50/50 p-2.5 rounded">
+                <span class="font-bold text-emerald-900">Total Recaudado Consolidado:</span>
+                <span class="text-lg font-black text-emerald-600 font-mono">{{ resumen().totalRecaudado | quetzal
+                    }}</span>
+            </div>
+        </section>
+
+        <!-- Ficha del Reporte Excel Descargado -->
+        <section class="bg-blue-50/50 border border-blue-200 rounded-lg p-3.5 flex items-center gap-3">
+            <div class="p-2 bg-blue-100 text-blue-700 rounded-md">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                    </path>
+                </svg>
+            </div>
+            <div class="text-xs overflow-hidden">
+                <span class="text-slate-500 block text-[11px]">Reporte generado y descargado:</span>
+                <strong class="text-blue-900 truncate block font-mono">{{ nombreArchivo() }}</strong>
+            </div>
+        </section>
+
+        <!-- Alerta y Checkbox Obligatorio -->
+        <div class="space-y-3">
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-md text-rose-900 text-[11px] leading-relaxed">
+                <strong>Atención:</strong> Al confirmar el cierre, los registros se transferirán al histórico permanente
+                y la tabla operativa diaria se vaciará para iniciar un nuevo día. Esta acción no se puede deshacer.
+            </div>
+
+            <label class="flex items-start gap-2.5 text-xs text-slate-700 cursor-pointer select-none">
+                <input type="checkbox" [ngModel]="checkConfirmado()" (ngModelChange)="checkConfirmado.set($event)"
+                    class="mt-0.5 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer h-4 w-4" />
+                <span>
+                    Confirmo que el archivo <strong>Excel (.xlsx)</strong> se descargó correctamente en mi equipo y que
+                    he validado que los montos cuadran con el efectivo físico en caja.
+                </span>
+            </label>
+        </div>
+
+        <!-- Botones de Acción -->
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-3 pt-2 border-t border-slate-100">
+            <button type="button" (click)="volverAuditoria()" [disabled]="procesandoCierre()"
+                class="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors cursor-pointer">
+                Volver a auditoría
+            </button>
+
+            <button type="button" (click)="ejecutarCierreSeguro()" [disabled]="!checkConfirmado() || procesandoCierre()"
+                class="w-full sm:w-auto px-5 py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white text-xs font-bold rounded-md shadow-sm transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                @if (procesandoCierre()) {
+                <div class="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Archivando jornada...</span>
+                } @else {
+                <span>Confirmar cierre definitivo</span>
+                }
+            </button>
+        </div>
+
+    </div>
+</main>
