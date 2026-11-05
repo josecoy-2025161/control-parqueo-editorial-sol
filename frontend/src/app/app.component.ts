@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { JornadaPollingService } from './core/services/jornada-polling.service';
 
@@ -28,8 +28,16 @@ import { JornadaPollingService } from './core/services/jornada-polling.service';
   `
 })
 
-export class AppComponent {
+export class App implements OnInit, OnDestroy {
   public jornadaService = inject(JornadaPollingService);
+
+  ngOnInit(): void {
+    this.jornadaService.iniciarPolling();
+  }
+
+  ngOnDestroy(): void {
+    this.jornadaService.detenerPolling();
+  }
 
   public recargarPagina(): void {
     window.location.reload();
