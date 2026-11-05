@@ -92,7 +92,9 @@ export class JornadaPollingService {
 
                 // SI LA JORNADA SE CERRÓ (0 tickets, fase REGISTRO o activa === false)
                 if (data.totalTicketsActivos === 0 || data.fase === 'REGISTRO' || data.activa === false) {
-                    if (this.faseActual() === 'AUDITORIA' || this.router.url.includes('/auditoria') || this.router.url.includes('/cierre')) {
+                    if (this.faseActual() === 'AUDITORIA' || this.router.url.includes('/cierre')) {
+                        this.notificarJornadaCerradaPorOtroOperador();
+                    } else {
                         this.aplicarFase('REGISTRO');
                     }
                 }
