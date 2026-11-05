@@ -1,6 +1,6 @@
 # Control de Parqueo (Editorial Sol) — Frontend
 
-Aplicación web (SPA) con la que los operadores **transcriben los tickets físicos**, revisan y corrigen la jornada, descargan el reporte Excel y confirman el cierre del día. Consume la API del [backend](../backend/README.md), que es la **fuente de verdad** de importes, totales y estado de la jornada.
+Aplicación web de una sola página (**SPA**) con la que los operadores **transcriben los tickets físicos**, revisan y corrigen la jornada, descargan el reporte Excel y confirman el cierre del día. Se comunica con la API del [backend](../backend/README.md), que es la **fuente de verdad** de los importes, los totales y el estado de la jornada.
 
 > Documentación general: [README de la raíz](../README.md) · API y reglas de negocio: [README del backend](../backend/README.md)
 
@@ -9,17 +9,15 @@ Aplicación web (SPA) con la que los operadores **transcriben los tickets físic
 ## Tabla de contenido
 
 1. [Tecnologías](#1-tecnologías)
-2. [Flujo de navegación](#2-flujo-de-navegación)
+2. [Instalación y ejecución](#2-instalación-y-ejecución)
 3. [Vistas de la aplicación](#3-vistas-de-la-aplicación)
-4. [Instalación y ejecución](#4-instalación-y-ejecución)
-5. [Configuración](#5-configuración)
-6. [Estructura del proyecto](#6-estructura-del-proyecto)
-7. [Arquitectura y comportamiento](#7-arquitectura-y-comportamiento)
-8. [Integración con la API](#8-integración-con-la-api)
-9. [Validaciones del formulario](#9-validaciones-del-formulario)
-10. [Diseño y accesibilidad](#10-diseño-y-accesibilidad)
-11. [Despliegue en producción](#11-despliegue-en-producción)
-12. [Notas técnicas](#12-notas-técnicas)
+4. [Flujo de pantallas protegido por Guards](#4-flujo-de-pantallas-protegido-por-guards)
+5. [Manejo de estado con Signals](#5-manejo-de-estado-con-signals)
+6. [Sincronización multisesión](#6-sincronización-multisesión)
+7. [Manejo de errores y conexión](#7-manejo-de-errores-y-conexión)
+8. [Diseño responsivo para tablets](#8-diseño-responsivo-para-tablets)
+9. [Estructura del proyecto](#9-estructura-del-proyecto)
+10. [Configuración y despliegue](#10-configuración-y-despliegue)
 
 ---
 
@@ -27,162 +25,264 @@ Aplicación web (SPA) con la que los operadores **transcriben los tickets físic
 
 | Tecnología | Versión | Uso |
 |---|---|---|
-| Angular | 22 | Framework (componentes *standalone*, *signals*, control de flujo `@if` / `@for`) |
-| TypeScript | ~6.0 | Lenguaje |
-| RxJS | ~7.8 | Peticiones HTTP, *debounce* y *polling* |
-| Tailwind CSS | 4 | Estilos (vía PostCSS) con paleta propia `sol-*` |
-| pnpm | 12 | Gestor de paquetes |
+| **Angular** | 22 | Framework principal (componentes *standalone*, Signals, `@if` / `@for`) |
+| **TypeScript** | ~6.0 | Lenguaje de programación con tipos |
+| **RxJS** | ~7.8 | Peticiones HTTP, consultas periódicas y esperas (*debounce*) |
+| **Tailwind CSS** | 4 | Estilos mediante clases utilitarias, con paleta propia `sol-*` |
+| **pnpm** | 12 | Gestor de paquetes |
 
-## 2. Flujo de navegación
+> **¿Qué es un componente *standalone*?** Es un componente de Angular que declara por sí mismo lo que necesita (otros componentes, pipes, formularios), sin depender de un `NgModule`. Esto hace el proyecto más simple y ordenado.
 
-El sistema cuenta con tres vistas principales y dos ventanas modales para gestionar las operaciones:
-
-1. **`/registro`:** vista principal donde los operadores registran los tickets de los vehículos. Al finalizar el registro del día, se redirige a la vista de auditoría.
-
-2. **`/auditoria`:** permite revisar los tickets registrados y realizar las siguientes acciones:
-   - **Editar:** abre un modal llamado *Balance de horario*, donde se pueden modificar los horarios de un ticket.
-   - **Eliminar:** abre un modal llamado *Anular boleta*, donde se puede anular un ticket indicando el motivo correspondiente.
-   - **Generar reporte Excel:** permite generar el reporte y continuar hacia la vista de cierre.
-
-3. **`/cierre`:** vista donde se confirma el cierre definitivo de la jornada. Desde aquí se puede regresar a la auditoría o confirmar el cierre para iniciar una nueva jornada.
-
-Una vez confirmado el cierre definitivo, el sistema redirige automáticamente a la vista `/registro` para comenzar una nueva jornada.
-
-| Ruta | Pantalla | Carga | Protegida por |
-|---|---|---|---|
-| `/` | Redirige a `/registro` | — | — |
-| `/registro` | Registro de tickets | Inmediata | `registroGuard` |
-| `/auditoria` | Auditoría de tickets | *Lazy* | `auditoriaGuard` |
-| `/cierre` | Confirmación de cierre | *Lazy* | `cierreGuard` |
-| `**` | Cualquier otra ruta redirige a `/registro` | — | — |
-
-> **Editar** y **Eliminar** no son rutas: se abren como **ventanas modales** sobre la auditoría.
-
-## 3. Vistas de la aplicación
-
-### 3.1. Registro de tickets (`/registro`)
-
-Formulario para transcribir cada boleta física y guardarla; el operador continúa con la siguiente.
-
-![Registro de tickets](docs/screenshots/01-registro.png)
-
-- **Campos:** fecha de operación (hoy por defecto, no admite fechas futuras), número de ticket (texto, máx. 20 dígitos), tipo de vehículo (Carro / Moto), hora de entrada y de salida, y las casillas *Aplica tarifa noche* y *Ticket perdido*.
-- **Cobro total:** campo de **solo lectura**. Se solicita al backend (`POST /sol/tarifas/calcular`) con una espera de 350 ms tras el último cambio, y muestra *Calculando…* mientras responde.
-- **Guardar boleta y agregar otra:** envía el ticket; si el servidor confirma, muestra el éxito y limpia el formulario **conservando la fecha y el tipo de vehículo** para capturar más rápido. Si falla (por ejemplo, número duplicado) conserva todos los datos y muestra el mensaje del servidor.
-- **Limpiar campos:** vacía la captura sin guardar.
-- **Finalizar registro del día y ver auditoría:** pasa a la auditoría sin borrar ni cerrar nada.
-
-### 3.2. Auditoría de tickets (`/auditoria`)
-
-Revisión de la jornada antes de generar el reporte.
-
-![Auditoría de tickets](docs/screenshots/02-auditoria.png)
-
-- **Tarjetas de resumen:** total de carros, total de motos, tickets perdidos y total recaudado. Provienen del backend y **no cambian al buscar**.
-- **Encabezado:** fecha de la jornada y total de registros.
-- **Búsqueda por número de ticket** (con espera de 300 ms): filtra la tabla, no los totales. La búsqueda es parcial.
-- **Tabla** (con desplazamiento horizontal en pantallas estrechas): fecha, número, tipo, horario, tiempo, avisos (*Ticket perdido* / *Tarifa noche*), estado de edición (*Sin editar* o *Editado* con el motivo), total y acciones **Editar** / **Eliminar**.
-- **Generar reporte Excel (.xlsx):** descarga el archivo y lleva a la pantalla de cierre. Se deshabilita si no hay tickets.
-- Estados contemplados: cargando, lista vacía y error de consulta.
-
-### 3.3. Editar horario / balance (modal)
-
-Corrige la hora de entrada y/o salida de un ticket.
-
-![Editar horario](docs/screenshots/03-editar-horario.png)
-
-- Muestra un resumen del ticket (vehículo, **horario previo** y **cobro actual**) y permite indicar la **nueva entrada** y la **nueva salida**; el **cobro recalculado** se obtiene del backend y se actualiza mientras se editan las horas.
-- **Motivo obligatorio** (mínimo 6 caracteres, sin emojis ni símbolos no permitidos).
-- Solo se modifican las horas: fecha, número, tipo de vehículo y ticket perdido no se pueden cambiar.
-- No permite guardar el mismo horario que ya tenía el ticket.
-- **Guardar corrección** actualiza la tabla y los totales; **Cancelar** (o ✕) no envía nada.
-
-### 3.4. Anular boleta (modal)
-
-Anulación auditada de un ticket capturado por error.
-
-![Anular boleta](docs/screenshots/04-anular-ticket.png)
-
-- Identifica la boleta (el número aparece en el título; además se muestran tipo de vehículo, horario y **monto a descartar**) y advierte que la anulación **queda registrada en la hoja *Tickets Eliminados* del Excel**; no es un borrado silencioso.
-- **Motivo obligatorio** con las mismas reglas que la edición.
-- Botón rojo para confirmar; **Cancelar** (o ✕) no modifica nada. Si falla, el ticket sigue en la tabla.
-
-### 3.5. Confirmación de cierre (`/cierre`)
-
-Último paso: revisar el resumen, verificar el archivo y cerrar la jornada.
-
-![Confirmación de cierre](docs/screenshots/05-cierre.png)
-
-- Muestra la fecha operativa, totales (carros, motos, perdidos, boletas), **total recaudado consolidado** y el **nombre del archivo** descargado (ej. `Reporte_Parqueo_04_11_2026.xlsx`).
-- Para habilitar **Confirmar cierre definitivo** el operador debe marcar la casilla en la que declara que el Excel se descargó y que los montos cuadran con la caja. Es una **confirmación manual**.
-- Tras la respuesta satisfactoria del servidor, el sistema regresa a `/registro` con la jornada vacía.
-- **Volver a auditoría** permite regresar (por ejemplo, para volver a generar el archivo si no se descargó) sin cerrar nada.
-
-## 4. Instalación y ejecución
+## 2. Instalación y ejecución
 
 ### Requisitos
 
-- Una versión **LTS reciente de Node.js** compatible con Angular 22.
+- **Node.js** en una versión LTS compatible con Angular 22.
 - **pnpm**.
-- El [backend](../backend/README.md) levantado en `http://localhost:3000`.
+- El [backend](../backend/README.md) funcionando en `http://localhost:3000`.
 
 ### Pasos
 
 ```bash
 cd frontend
 pnpm install
-pnpm start        # http://localhost:4200
+pnpm start
 ```
 
-Al abrir la aplicación, el navegador mostrará su cuadro nativo de **inicio de sesión** (HTTP Basic Auth). Usa las credenciales `AUTH_USER` / `AUTH_PASS` del `.env` del backend.
+La aplicación queda disponible en `http://localhost:4200`. Al abrirla, el navegador muestra su cuadro de **inicio de sesión**; ingresa las credenciales `AUTH_USER` / `AUTH_PASS` configuradas en el backend.
 
 ### Scripts
 
-| Script | Comando real | Descripción |
+| Script | Comando | Descripción |
 |---|---|---|
 | `pnpm start` | `ng serve --proxy-config proxy.conf.json` | Servidor de desarrollo con proxy hacia el backend |
-| `pnpm build` | `ng build` | Compilación de producción (`dist/frontend/browser`) |
+| `pnpm build` | `ng build` | Compilación para producción en `dist/frontend/browser` |
 | `pnpm watch` | `ng build --watch --configuration development` | Compilación continua en modo desarrollo |
-| `pnpm test` | `ng test` | Ejecuta pruebas unitarias |
+| `pnpm test` | `ng test` | Ejecuta las pruebas unitarias |
 
-## 5. Configuración
+## 3. Vistas de la aplicación
 
-### URL de la API
+### 3.1. Registro de tickets (`/registro`)
 
-La URL base está centralizada en `src/environments/environment.ts`:
+Formulario para transcribir cada boleta física.
 
-```ts
-export const environment = {
-  production: true,
-  apiUrl: '/sol',               // ruta relativa: la API se sirve en el mismo origen
-  pollingIntervalMs: 3000,      // frecuencia con la que se consulta el estado de la jornada
-};
+![Registro de tickets](docs/screenshots/01-registro.png)
+
+- **Campos:** fecha de operación (hoy por defecto, no permite fechas futuras), número de ticket, tipo de vehículo (Carro / Moto), hora de entrada, hora de salida y las casillas *Aplica tarifa noche* y *Ticket perdido*.
+- **Cobro total:** campo de solo lectura. Se pide al backend automáticamente **350 ms** después de que el operador deja de escribir, y muestra *Calculando…* mientras espera la respuesta.
+- **Guardar boleta y agregar otra:** guarda el ticket y limpia el formulario, pero **conserva la fecha y el tipo de vehículo** para capturar más rápido. Si hay un error (por ejemplo, número duplicado), los datos no se borran.
+- **Finalizar registro del día y ver auditoría:** cambia la jornada a la fase de auditoría sin borrar nada.
+
+### 3.2. Auditoría de tickets (`/auditoria`)
+
+Revisión completa de la jornada antes de generar el reporte.
+
+![Auditoría de tickets](docs/screenshots/02-auditoria.png)
+
+- **Tarjetas de resumen:** total de carros, motos, tickets perdidos y total recaudado.
+- **Búsqueda por número de ticket** (espera de 300 ms): filtra la tabla, pero los totales siempre muestran toda la jornada.
+- **Tabla de tickets:** fecha, número, tipo, horario, tiempo, avisos (*Ticket perdido* / *Tarifa noche*), estado (*Sin editar* o *Editado* con su motivo), total y botones **Editar** / **Eliminar**.
+- **Generar reporte Excel (.xlsx):** descarga el archivo y lleva a la pantalla de cierre.
+
+### 3.3. Editar horario (modal *Balance de horario*)
+
+![Editar horario](docs/screenshots/03-editar-horario.png)
+
+- Muestra el horario anterior y el cobro actual, y permite indicar la nueva entrada y la nueva salida.
+- El **cobro recalculado** se pide al backend mientras se editan las horas.
+- **Motivo obligatorio** (mínimo 6 caracteres).
+- No permite guardar si el horario no cambió.
+
+### 3.4. Anular boleta (modal)
+
+![Anular boleta](docs/screenshots/04-anular-ticket.png)
+
+- Muestra el número, tipo de vehículo, horario y **monto a descartar**.
+- Advierte que la anulación quedará registrada en la hoja *Tickets Eliminados* del Excel.
+- **Motivo obligatorio** con las mismas reglas que la edición.
+
+### 3.5. Confirmación de cierre (`/cierre`)
+
+![Confirmación de cierre](docs/screenshots/05-cierre.png)
+
+- Muestra la fecha, los totales, el **total recaudado** y el nombre del archivo descargado (por ejemplo `Reporte_Parqueo_04_11_2026.xlsx`).
+- El botón **Confirmar cierre definitivo** solo se habilita cuando el operador marca la casilla que confirma que el Excel se descargó y los montos cuadran con la caja.
+- **Volver a auditoría** permite regresar sin cerrar nada (por ejemplo, para volver a descargar el archivo).
+- Tras la confirmación del servidor, la aplicación regresa a `/registro` con una jornada vacía.
+
+## 4. Flujo de pantallas protegido por Guards
+
+### 4.1. ¿Qué es un Guard?
+
+Un **Guard** es una función de Angular que se ejecuta **antes de entrar a una ruta** y decide si el usuario puede pasar o si debe ser redirigido a otra pantalla. Funciona como un “guardia de seguridad” en la puerta de cada vista.
+
+En este sistema, los Guards garantizan que el operador siga el orden correcto de la jornada: **no se puede auditar sin haber terminado el registro, ni cerrar sin haber descargado el Excel**, aunque se escriba la ruta directamente en la barra del navegador.
+
+### 4.2. Rutas
+
+| Ruta | Pantalla | Carga | Guard |
+|---|---|---|---|
+| `/` | Redirige a `/registro` | — | — |
+| `/registro` | Registro de tickets | Inmediata | `registroGuard` |
+| `/auditoria` | Auditoría de tickets | *Lazy* (bajo demanda) | `auditoriaGuard` |
+| `/cierre` | Confirmación de cierre | *Lazy* (bajo demanda) | `cierreGuard` |
+| `**` | Cualquier otra ruta → `/registro` | — | — |
+
+> **Carga *lazy*:** las pantallas de auditoría y cierre solo se descargan cuando el operador las necesita, lo que hace que la aplicación inicie más rápido.
+
+### 4.3. Reglas de cada Guard
+
+| Guard | Permite entrar si… | Si no, redirige a |
+|---|---|---|
+| `registroGuard` | La jornada está vacía o en fase `REGISTRO` | `/auditoria` |
+| `auditoriaGuard` | Hay tickets activos **y** la fase en el backend es `AUDITORIA` | `/registro` |
+| `cierreGuard` | La fase es `AUDITORIA` **y** ya se generó el reporte Excel | `/registro` o `/auditoria` |
+
+`registroGuard` y `auditoriaGuard` consultan el estado real en el backend (`GET /sol/jornada/estado`) antes de decidir, por lo que siempre respetan la fase guardada en la base de datos.
+
+```text
+                ┌─────────────┐  Finalizar registro   ┌──────────────┐  Generar Excel  ┌────────────┐
+  Inicio  ───►  │  /registro  │ ────────────────────► │  /auditoria  │ ──────────────► │  /cierre   │
+                └─────────────┘                       └──────────────┘                 └─────┬──────┘
+                       ▲                                                                    │
+                       └──────────────────────── Cierre confirmado ─────────────────────────┘
 ```
 
-`environment.development.ts` define los mismos valores.
+## 5. Manejo de estado con Signals
 
-### Proxy de desarrollo
+### 5.1. ¿Qué es un Signal?
 
-`proxy.conf.json` redirige las peticiones `/sol/*` al backend:
+Un **Signal** es una variable especial de Angular que **avisa automáticamente a la pantalla cuando su valor cambia**. Si un Signal se actualiza, Angular vuelve a dibujar solo la parte de la vista que lo usa, sin que el programador tenga que hacerlo manualmente.
 
-```json
-{
-  "/sol": { "target": "http://localhost:3000", "secure": false, "changeOrigin": true }
+```ts
+// Crear un signal con valor inicial
+public cargando = signal<boolean>(true);
+
+// Cambiar su valor
+this.cargando.set(false);
+
+// Leerlo en la plantilla HTML
+@if (cargando()) { <p>Cargando…</p> }
+```
+
+### 5.2. Uso en el proyecto
+
+| Dónde | Signals principales | Para qué |
+|---|---|---|
+| `JornadaPollingService` | `faseActual`, `estadoJornada`, `jornadaCerradaModalVisible` | Estado global de la jornada compartido por toda la aplicación |
+| `ReportesService` | `ultimoReporteDescargado` | Saber si ya se descargó el Excel (lo usa `cierreGuard`) |
+| Registro | `cobroCalculado`, `calculandoTarifa` | Vista previa del cobro |
+| Auditoría | `tickets`, `resumen`, `cargando`, `ticketParaEditar`, `ticketParaAnular` | Tabla, totales y apertura de modales |
+| Modales | `nuevoCosto`, `procesando`, `errorMensaje` | Estado de la corrección o anulación |
+| Cierre | `checkConfirmado`, `procesandoCierre` | Habilitar el botón de cierre y evitar envíos repetidos |
+
+Gracias a los Signals, los botones se deshabilitan mientras se procesa una acción, los mensajes de error aparecen al instante y los totales se actualizan solos cuando cambian los datos.
+
+## 6. Sincronización multisesión
+
+El sistema permite que varios operadores trabajen al mismo tiempo (por ejemplo, uno en computadora y otro en tablet). Para que todas las pantallas muestren siempre la misma información, se combinan **tres mecanismos**:
+
+### 6.1. Polling al backend (entre dispositivos)
+
+**Polling** significa “preguntar periódicamente”. El servicio `JornadaPollingService` consulta `GET /sol/jornada/estado` cada **2 segundos** desde que se abre la aplicación.
+
+En cada consulta compara la respuesta con la anterior (número de tickets, fase, fecha, total recaudado, tickets editados y el contador `version`). Según lo que encuentre:
+
+| Lo que detecta | Lo que hace |
+|---|---|
+| Otro operador registró, editó o anuló un ticket (`version` cambió) | Recarga la tabla y los totales de la auditoría |
+| Otro operador finalizó el registro (fase pasó a `AUDITORIA`) | Lleva esta pantalla a `/auditoria` |
+| La jornada se quedó sin tickets mientras este operador estaba en auditoría o cierre | Muestra el **modal de Jornada Reiniciada** |
+
+### 6.2. Modal global de *Jornada Reiniciada*
+
+Cuando el operador **A** cierra la jornada, el operador **B** (por ejemplo, en la tablet) podría seguir viendo datos que ya fueron archivados. Para evitarlo:
+
+1. El polling de la pantalla de **B** detecta que los tickets activos bajaron a **0**.
+2. Se activa el Signal `jornadaCerradaModalVisible`.
+3. El componente raíz (`app.component.ts`) muestra un modal que **cubre toda la pantalla** (`z-100`, fondo oscurecido y desenfocado) con el aviso *“Jornada Reiniciada — El sistema ha sido archivado y cerrado por otro operador”*.
+4. El operador **B** no puede seguir trabajando hasta presionar **“Entendido, recargar jornada”**, que recarga la aplicación y lo lleva al registro vacío.
+
+Como el modal vive en el componente raíz, funciona **en cualquier pantalla** en la que se encuentre el operador. El mismo aviso se muestra si la API responde `409` con los códigos `JORNADA_CERRADA` o `JORNADA_YA_CERRADA`.
+
+### 6.3. BroadcastChannel y localStorage (entre pestañas)
+
+Si un mismo operador tiene **varias pestañas abiertas en el mismo navegador**, estas se sincronizan al instante, sin esperar al siguiente polling:
+
+| Mecanismo | Qué comunica |
+|---|---|
+| **`BroadcastChannel`** (`sol_parqueo_channel`) | Mensajes entre pestañas: `FASE_CAMBIADA` y `TICKETS_MODIFICADOS` |
+| **`localStorage`** (`sol_fase_jornada`, `sol_tickets_sync`) | Respaldo para navegadores que no soportan `BroadcastChannel` |
+
+> **`BroadcastChannel`** es una herramienta del navegador que permite enviar mensajes entre pestañas del mismo sitio, como si fuera un “canal de radio” interno.
+
+### 6.4. Resumen
+
+| Mecanismo | Alcance | Velocidad |
+|---|---|---|
+| Polling (`/sol/jornada/estado`) | Entre **dispositivos distintos** | Cada 2 segundos |
+| `BroadcastChannel` + `localStorage` | Entre **pestañas del mismo navegador** | Inmediata |
+| Recarga tras cada acción | La **pantalla actual** | Inmediata |
+
+## 7. Manejo de errores y conexión
+
+Todas las peticiones pasan por un **interceptor HTTP** (`basic-auth.interceptor.ts`). Un interceptor es una función que “intercepta” cada petición y cada respuesta, para agregar datos o reaccionar ante errores en un solo lugar.
+
+| Situación | Comportamiento |
+|---|---|
+| Cualquier petición | Se envía con `withCredentials: true` para incluir las credenciales de Basic Auth |
+| Respuesta `409` con `JORNADA_CERRADA` o `JORNADA_YA_CERRADA` | Se muestra el modal de *Jornada Reiniciada* |
+| **Pérdida de conexión** (error con estado `0`) | Se muestra una **alerta del navegador** avisando de la pérdida temporal de conexión. El operador **permanece en su pantalla** y no pierde los datos que estaba escribiendo |
+| Otros errores (`400`, `404`, `500`) | Cada pantalla muestra el `mensaje` que devuelve el backend |
+
+Además, cuando una operación falla, los datos del formulario se conservan, y el mensaje de éxito solo aparece después de que el servidor confirma la operación.
+
+## 8. Diseño responsivo para tablets
+
+La interfaz está diseñada para usarse cómodamente en **computadora y tablet**.
+
+### 8.1. Adaptación con Tailwind CSS
+
+Tailwind permite cambiar el diseño según el ancho de la pantalla usando prefijos como `sm:`, `md:` y `lg:`:
+
+| Elemento | En tablet / pantallas pequeñas | En computadora |
+|---|---|---|
+| Tarjetas de resumen | 2 columnas (`grid-cols-2`) | 4 columnas (`md:grid-cols-4`) |
+| Encabezado de auditoría | Elementos apilados | Elementos en una fila (`md:flex-row`) |
+| Botones del cierre | Ocupan todo el ancho | Tamaño automático (`sm:w-auto`) |
+| Márgenes | Reducidos (`px-4`) | Amplios (`sm:px-6`, `lg:px-8`) |
+
+### 8.2. Tabla con scroll horizontal
+
+La tabla de auditoría tiene muchas columnas. En lugar de comprimirlas hasta volverlas ilegibles, la tabla se coloca dentro de un contenedor con **desplazamiento horizontal** (`overflow-x-auto`). En tablets, el operador puede deslizar la tabla con el dedo para ver todas las columnas.
+
+La clase `.tabla-scroll` muestra una **barra de desplazamiento delgada y visible**, para que el operador sepa que hay más contenido a la derecha:
+
+```css
+.tabla-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
 }
 ```
 
-Si tu backend corre en otro puerto, cambia `target`. El proxy **solo aplica con `pnpm start`**; para producción consulta la [sección 11](#11-despliegue-en-producción).
+### 8.3. Diseño limpio
 
-## 6. Estructura del proyecto
+- Estilo administrativo: fondo claro, tarjetas blancas, bordes sutiles y textos claros.
+- **Colores con significado:** verde para acciones principales, azul para edición y navegación, rojo para anulaciones, errores y cierre.
+- Paleta propia definida en `src/styles.css` (`sol-green`, `sol-blue`, `sol-red`, `sol-bg`, `sol-surface`, `sol-border`).
+- Etiquetas visibles en todos los campos, errores junto al campo correspondiente y estados indicados con **texto además de color** (por ejemplo *Ticket perdido* o *Editado*).
+- Botones con indicador de carga, deshabilitados mientras se procesa una acción.
+
+## 9. Estructura del proyecto
 
 ```text
 frontend/
-├── docs/screenshots/               # Capturas usadas en los README
+├── docs/screenshots/               # Capturas usadas en la documentación
 ├── public/                         # Recursos estáticos (favicon)
 ├── src/
 │   ├── app/
 │   │   ├── core/
-│   │   │   ├── guards/             # registro, auditoria, cierre (y auth, sin uso actual)
+│   │   │   ├── guards/             # registro, auditoria y cierre
 │   │   │   ├── interceptors/       # basic-auth.interceptor.ts
 │   │   │   └── services/           # jornada-polling, reportes, auth
 │   │   ├── features/
@@ -190,14 +290,14 @@ frontend/
 │   │   │   ├── auditoria/          # Pantalla, servicio y modales
 │   │   │   │   └── components/     # balance-modal, anular-modal
 │   │   │   └── cierre/             # Pantalla de cierre + servicio
-│   │   ├── models/                 # Interfaces TypeScript (DTO de la API)
+│   │   ├── models/                 # Interfaces TypeScript de la API
 │   │   ├── shared/
 │   │   │   ├── pipes/              # quetzal, ticket-duration
-│   │   │   └── validators/         # text-motivo.validator.ts
-│   │   ├── app.component.ts        # Raíz: inicia el polling de la jornada
+│   │   │   └── validators/         # Validador del texto de los motivos
+│   │   ├── app.component.ts        # Raíz: inicia el polling y contiene el modal global
 │   │   ├── app.config.ts           # Router, HttpClient e interceptor
-│   │   └── app.routes.ts           # Rutas y guards
-│   ├── environments/
+│   │   └── app.routes.ts           # Rutas y Guards
+│   ├── environments/               # Configuración de la URL de la API y el polling
 │   ├── index.html
 │   ├── main.ts
 │   └── styles.css                  # Tailwind + paleta de colores
@@ -206,133 +306,67 @@ frontend/
 └── package.json
 ```
 
-Cada *feature* mantiene separadas la **interfaz** (componente), la **comunicación con la API** (servicio) y los **modelos**.
+La carpeta `core/` contiene lo que se usa en **toda la aplicación** (servicios globales, Guards, interceptor); `features/` agrupa cada **pantalla** con su propio servicio; y `shared/` guarda piezas **reutilizables** (pipes y validadores).
 
-## 7. Arquitectura y comportamiento
-
-### 7.1. Autenticación
-
-El backend responde `401` con la cabecera `WWW-Authenticate`, por lo que el **navegador muestra su diálogo nativo** de Basic Auth y reutiliza las credenciales en las siguientes peticiones. La aplicación no tiene pantalla de login propia ni guarda contraseñas.
-
-El interceptor (`basic-auth.interceptor.ts`) además:
-
-- Marca las peticiones con `withCredentials: true`.
-- Añade `Authorization: Basic …` solo si existe un token en `sessionStorage` (`sol_auth`).
-- Ante un `409` con código `JORNADA_CERRADA` o `JORNADA_YA_CERRADA`, avisa al servicio de jornada de que otro operador cerró y devuelve al operador al registro.
-
-### 7.2. Sincronización entre operadores
-
-No hay WebSockets. La coordinación se logra así:
-
-| Mecanismo | Qué hace |
-|---|---|
-| **Polling** cada 3 s a `GET /sol/jornada/estado` | Detecta cambios de otros operadores (usa el campo `version`, totales, fase y fecha) y recarga la auditoría |
-| **Fase de la jornada** del backend (`REGISTRO` / `AUDITORIA`) | Si otro operador finaliza el registro, esta sesión pasa a auditoría; si la jornada se vacía, vuelve a registro |
-| **`BroadcastChannel`** (`sol_parqueo_channel`) y `localStorage` | Sincronizan al instante **varias pestañas del mismo navegador** (cambio de fase y tickets modificados) |
-| Recarga tras cada operación | Después de editar, anular o registrar, la tabla y los totales se vuelven a pedir al servidor |
-
-Claves de `localStorage` usadas: `sol_fase_jornada` y `sol_tickets_sync`.
-
-### 7.3. Guards
-
-| Guard | Permite entrar si… | Si no, redirige a |
-|---|---|---|
-| `registroGuard` | La jornada está vacía o en fase `REGISTRO` | `/auditoria` (si la fase ya es `AUDITORIA`) |
-| `auditoriaGuard` | Hay tickets y la fase es `AUDITORIA` | `/registro` |
-| `cierreGuard` | La fase es `AUDITORIA` y ya se generó el Excel en esta sesión | `/registro` o `/auditoria` |
-
-> Si recargas la página en `/cierre`, se pierde el dato en memoria de que el Excel fue descargado y la aplicación te devuelve a `/auditoria`.
-
-### 7.4. Descarga del Excel
-
-1. En la auditoría se pide `GET /sol/reportes/excel` como **archivo binario** (`blob`).
-2. El nombre se toma de la cabecera `Content-Disposition` (con un nombre alternativo si no está disponible).
-3. Se dispara la descarga en el navegador y se navega a `/cierre` enviando el nombre del archivo y el resumen.
-4. **Generar el reporte no cierra la jornada.**
-
-### 7.5. Cierre
-
-`POST /sol/cierre/confirmar` solo se envía después de marcar la casilla de confirmación. No se simula ningún cierre local: la aplicación vuelve al registro únicamente tras la respuesta satisfactoria. El botón se deshabilita mientras se procesa para evitar envíos repetidos.
-
-### 7.6. Formato de datos
-
-| Elemento | Formato |
-|---|---|
-| Moneda | `Q 15.00` (pipe `quetzal`) |
-| Duración | Texto legible del backend (ej. `1 hr 25 min`); alternativa calculada desde los minutos (pipe `ticketDuration`) |
-| Número de ticket | Siempre **texto**, para conservar ceros iniciales |
-| Horas enviadas a la API | `HH:mm` (24 h) |
-
-## 8. Integración con la API
-
-Todas las rutas usan la base `/sol` y HTTP Basic Auth.
-
-| Método | Endpoint | Dónde se usa |
-|---|---|---|
-| `GET` | `/sol/jornada/estado` | Polling y guards |
-| `POST` | `/sol/jornada/finalizar-registro` | Botón *Finalizar registro del día* |
-| `POST` | `/sol/tarifas/calcular` | Vista previa del cobro (registro y balance) |
-| `POST` | `/sol/tickets` | Guardar boleta |
-| `GET` | `/sol/tickets/activos` (`?numero=`) | Tabla y totales de auditoría; resumen de cierre |
-| `PATCH` | `/sol/tickets/:id/balance` | Guardar corrección de horario |
-| `DELETE` | `/sol/tickets/:id` | Anular ticket (cuerpo: `motivoEliminacion`) |
-| `GET` | `/sol/reportes/excel` | Descarga del reporte |
-| `POST` | `/sol/cierre/confirmar` | Confirmar cierre |
-
-`GET /sol/acceso/verificar`, `GET /sol/tickets/buscar/:numero` y `GET /sol/cierre/historico` existen en el backend y en el código del frontend (servicios o modelos), pero **ninguna pantalla los utiliza todavía**.
-
-**Manejo de errores:** los componentes muestran el campo `mensaje` que devuelve el backend y, si no existe, un texto genérico. Cuando una operación falla, los datos del formulario se conservan; el éxito solo se muestra tras la confirmación del servidor.
-
-## 9. Validaciones del formulario
-
-Validaciones en la interfaz (el backend las vuelve a aplicar):
+### Validaciones del formulario
 
 | Campo | Regla |
 |---|---|
 | Fecha de operación | Obligatoria; no puede ser futura |
-| Número de ticket | Obligatorio; solo dígitos (máx. 20) |
+| Número de ticket | Obligatorio; solo números (máximo 20) |
 | Hora de entrada / salida | Obligatorias; la salida debe ser distinta de la entrada |
 | Motivo (edición y anulación) | Obligatorio; mínimo 6 caracteres; solo letras (con tildes, `ñ`, `ü`), números, espacios y `. , ; : ( ) # - _ /` |
-| Balance | Al menos una hora debe cambiar respecto al ticket original |
 
-## 10. Diseño y accesibilidad
+El backend vuelve a validar todos los datos, por lo que la información siempre se revisa dos veces.
 
-- Estilo administrativo: fondo claro, superficies blancas, bordes sutiles y jerarquía tipográfica clara.
-- **Verde** para acciones principales, **azul** para edición/navegación y **rojo** para anulaciones, errores y cierre.
-- Paleta definida en `src/styles.css` (`sol-green`, `sol-blue`, `sol-red`, `sol-bg`, `sol-surface`, `sol-border`).
-- Adaptada a **computadora y tablet**: las tarjetas y formularios se reorganizan y la tabla tiene barra de desplazamiento horizontal visible.
-- Campos con etiquetas visibles, errores junto al campo, foco visible y estados diferenciados con texto además de color (por ejemplo *Ticket perdido*, *Editado*).
-- Botones con indicador de carga y deshabilitados durante el envío.
+## 10. Configuración y despliegue
 
-## 11. Despliegue en producción
+### 10.1. URL de la API y frecuencia del polling
 
-`pnpm build` genera archivos estáticos en `dist/frontend/browser`. Como `apiUrl` es `/sol` (ruta relativa) y el `proxy.conf.json` solo existe en desarrollo, en producción hay que servir el frontend y **redirigir `/sol` al backend** bajo el mismo dominio. Ejemplo con Nginx:
+Se configuran en `src/environments/environment.ts`:
+
+```ts
+export const environment = {
+  production: true,
+  apiUrl: '/sol',           // Ruta relativa: la API se sirve en el mismo dominio
+  pollingIntervalMs: 2000,  // Consultar el estado de la jornada cada 2 segundos
+};
+```
+
+### 10.2. Proxy de desarrollo
+
+Con `pnpm start`, el archivo `proxy.conf.json` redirige las peticiones `/sol/*` al backend:
+
+```json
+{
+  "/sol": { "target": "http://localhost:3000", "secure": false, "changeOrigin": true }
+}
+```
+
+### 10.3. Despliegue en producción
+
+`pnpm build` genera archivos estáticos en `dist/frontend/browser`. En producción, un servidor web (por ejemplo **Nginx**) entrega el frontend y redirige `/sol` hacia el backend:
 
 ```nginx
 server {
     listen 80;
-    server_name parqueo.ejemplo.com;
+    server_name parqueo.editorialsol.com;
 
     root /var/www/parqueo/browser;
     index index.html;
 
-    # API del backend (mismo origen → sin CORS y con Basic Auth nativo)
+    # API del backend
     location /sol/ {
         proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
 
-    # Rutas de la SPA
+    # Rutas de la SPA (Angular)
     location / {
         try_files $uri $uri/ /index.html;
     }
 }
 ```
 
-Recomendaciones: usar **HTTPS** (Basic Auth envía las credenciales codificadas, no cifradas) y ejecutar el backend como una sola instancia.
-
-## 12. Notas técnicas
-
-- Las horas se muestran tal como las entrega la API (por ejemplo `12:00:00`) y las fechas en formato `AAAA-MM-DD`.
-- El orden y los totales vienen del backend; el frontend no los recalcula.
+> Se recomienda publicar el sistema con **HTTPS** y registrar el dominio de producción en la variable `CORS_ORIGIN` del backend.
