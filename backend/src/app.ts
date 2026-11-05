@@ -32,4 +32,21 @@ app.use(notFoundMiddleware);
 // Middleware global para excepciones y colisiones de BD (500 / 409)
 app.use(globalErrorHandler);
 
+// Configuración restrictiva de CORS para producción
+const dominiosPermitidos = [
+    'http://localhost:4200',
+    process.env.CORS_ORIGIN
+].filter(Boolean);
+
+app.use(cors({
+    origin: (origen, callback) => {
+        if (!origen || dominiosPermitidos.includes(origen)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Acceso no permitido por CORS'));
+        }
+    },
+    credentials: true
+}));
+
 export default app;

@@ -107,3 +107,15 @@ CREATE TABLE IF NOT EXISTS auditoria_tickets_registrados (
 
 CREATE INDEX idx_historico_fecha_operacion ON auditoria_tickets_registrados(fecha_operacion);
 CREATE INDEX idx_historico_numero ON auditoria_tickets_registrados(numero_ticket);
+
+-- =============================================================================
+-- TABLA 4: CONFIGURACIÓN GLOBAL (Fase de Jornada y Versión)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS configuracion_jornada (
+    id INT PRIMARY KEY,
+    fase ENUM('REGISTRO', 'AUDITORIA') NOT NULL DEFAULT 'REGISTRO',
+    version INT NOT NULL DEFAULT 1
+) ENGINE=InnoDB;
+
+-- Insertar el registro único de configuración inicial
+INSERT IGNORE INTO configuracion_jornada (id, fase, version) VALUES (1, 'REGISTRO', 1);
