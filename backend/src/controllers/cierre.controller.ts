@@ -6,7 +6,7 @@ export class CierreController {
     public static async confirmarCierre(_req: Request, res: Response): Promise<void> {
         try {
             const resumen = await CierreService.confirmarCierreJornada();
-            JornadaService.reiniciarFase(); // <-- Asegura que la siguiente jornada empiece en REGISTRO
+            await JornadaService.reiniciarFase(); // <-- Asegura que la siguiente jornada empiece en REGISTRO
 
             res.status(200).json({
                 ok: true,

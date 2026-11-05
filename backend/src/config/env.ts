@@ -5,6 +5,7 @@ export const ENV = {
     PORT: Number(process.env.PORT) || 3000,
     AUTH_USER: process.env.AUTH_USER || 'admin',
     AUTH_PASS: process.env.AUTH_PASS || 'admin123',
+    CORS_ORIGIN: process.env.CORS_ORIGIN || '',
     DB: {
         HOST: process.env.DB_HOST || 'localhost',
         USER: process.env.DB_USER || 'root',
